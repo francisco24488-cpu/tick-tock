@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RegistroService, Empresa, Empleado, Registro } from './services/registro';
@@ -10,7 +10,7 @@ import { RegistroService, Empresa, Empleado, Registro } from './services/registr
   templateUrl: './app.html',
   styleUrl: './app.css'
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
   empresa: Empresa = { nombre: 'Mastache Servicio', sucursal: 'UTNG', codigo: 'UTNG-2026', horario: '02:00 PM - 07:00 PM' };
   empleados: Empleado[] = [];
   registros: Registro[] = [];
@@ -27,6 +27,12 @@ export class App implements OnInit {
   relojHora: string = '00:00:00';
   relojAmPm: string = 'PM';
   relojFecha: string = '';
+  private timerId: any;
+
+  // Notificaciones Toast
+  mostrarToast: boolean = false;
+  mensajeToast: string = '';
+  tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
 
   // Modales
   mostrarModalEmpleado: boolean = false;
@@ -43,7 +49,10 @@ export class App implements OnInit {
   avatares = ['👨‍🎓', '👩‍🎓', '🧑‍💻', '📁', '🧹', '📚', '👤'];
   departamentos = ['Edificio D', 'Edificio A', 'Edificio B', 'Biblioteca', 'Laboratorios'];
 
-  constructor(private registroService: RegistroService) {}
+  constructor(
+    private registroService: RegistroService,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {
     this.iniciarReloj();
@@ -59,8 +68,17 @@ export class App implements OnInit {
           this.alCambiarEmpleado();
         }
       },
-      error: (err) => console.error('Error al cargar datos JSON:', err)
+      error: (err) => {
+        console.error('Error al cargar datos JSON:', err);
+        this.notificar('Error al cargar base de datos inicial', 'alerta');
+      }
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.timerId) {
+      clearInterval(this.timerId);
+    }
   }
 
   iniciarReloj(): void {
@@ -81,10 +99,22 @@ export class App implements OnInit {
       this.relojAmPm = horas >= 12 ? 'PM' : 'AM';
       horas = horas % 12 || 12;
       this.relojHora = `${horas.toString().padStart(2, '0')}:${mins}:${segs}`;
+      
+      // Forzar actualización de vista para evitar que el reloj se congelé
+      this.cdr.detectChanges();
     };
 
     actualizar();
-    setInterval(actualizar, 1000);
+    this.timerId = setInterval(actualizar, 1000);
+  }
+
+  notificar(mensaje: string, tipo: 'exito' | 'alerta' | 'info' = 'exito'): void {
+    this.mensajeToast = mensaje;
+    this.tipoToast = tipo;
+    this.mostrarToast = true;
+    setTimeout(() => {
+      this.mostrarToast = false;
+    }, 3000);
   }
 
   alCambiarEmpleado(): void {
@@ -121,6 +151,7 @@ export class App implements OnInit {
     };
 
     this.registros.unshift(nuevo);
+    this.notificar(`Entrada registrada para ${this.empleadoSeleccionado.nombre}`, 'exito');
     this.observacionActual = '';
   }
 
@@ -132,9 +163,11 @@ export class App implements OnInit {
     if (reg.estado === 'En Turno') {
       reg.estado = 'En Pausa';
       reg.horaPausaInicio = horaActual;
+      this.notificar(`Receso iniciado para ${reg.empleadoNombre}`, 'info');
     } else if (reg.estado === 'En Pausa') {
       reg.estado = 'En Turno';
       reg.horaPausaFin = horaActual;
+      this.notificar(`Servicio reanudado para ${reg.empleadoNombre}`, 'exito');
     }
   }
 
@@ -146,6 +179,7 @@ export class App implements OnInit {
     reg.horaSalida = ahora.toLocaleTimeString('es-ES');
     reg.estado = 'Completado';
     reg.totalHoras = 'Turno Finalizado';
+    this.notificar(`Salida registrada para ${reg.empleadoNombre}`, 'alerta');
   }
 
   get registrosFiltrados(): Registro[] {
@@ -165,6 +199,7 @@ export class App implements OnInit {
 
   eliminarRegistro(id: number): void {
     this.registros = this.registros.filter(r => r.id !== id);
+    this.notificar('Registro eliminado del historial', 'info');
   }
 
   abrirModalEmpleado(): void { this.mostrarModalEmpleado = true; }
@@ -188,11 +223,15 @@ export class App implements OnInit {
     this.empleadoSeleccionadoId = emp.id;
     this.alCambiarEmpleado();
     this.cerrarModalEmpleado();
+    this.notificar(`Estudiante ${emp.nombre} agregado con éxito`, 'exito');
     this.nuevoEmpleado = { nombre: '', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 };
   }
 
   exportarCSV(): void {
-    if (this.registros.length === 0) return;
+    if (this.registros.length === 0) {
+      this.notificar('No hay datos para exportar', 'alerta');
+      return;
+    }
 
     let csv = "ID,Estudiante,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Realizada\n";
     this.registros.forEach(r => {
@@ -206,5 +245,6 @@ export class App implements OnInit {
     a.download = `Reporte_Asistencia_UTNG_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    this.notificar('Reporte CSV generado correctamente', 'exito');
   }
 }
