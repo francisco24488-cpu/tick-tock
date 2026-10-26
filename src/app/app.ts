@@ -11,6 +11,9 @@ import { RegistroService, Empresa, Empleado, Registro } from './services/registr
   styleUrl: './app.css'
 })
 export class App implements OnInit, OnDestroy {
+  // Control de Vista / Rol ('estudiante' | 'admin')
+  vistaActual: 'estudiante' | 'admin' = 'estudiante';
+
   empresa: Empresa = { nombre: 'Mastache Servicio', sucursal: 'UTNG', codigo: 'UTNG-2026', horario: '02:00 PM - 07:00 PM' };
   empleados: Empleado[] = [];
   registros: Registro[] = [];
@@ -23,7 +26,7 @@ export class App implements OnInit, OnDestroy {
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
 
-  // Reloj Digital
+  // Reloj Digital Continuo
   relojHora: string = '00:00:00';
   relojAmPm: string = 'PM';
   relojFecha: string = '';
@@ -70,7 +73,7 @@ export class App implements OnInit, OnDestroy {
       },
       error: (err) => {
         console.error('Error al cargar datos JSON:', err);
-        this.notificar('Error al cargar base de datos inicial', 'alerta');
+        this.notificar('Error al cargar la base de datos inicial', 'alerta');
       }
     });
   }
@@ -79,6 +82,12 @@ export class App implements OnInit, OnDestroy {
     if (this.timerId) {
       clearInterval(this.timerId);
     }
+  }
+
+  cambiarVista(nuevaVista: 'estudiante' | 'admin'): void {
+    this.vistaActual = nuevaVista;
+    const rolTexto = nuevaVista === 'admin' ? 'Panel Administrador (Docente)' : 'Terminal de Fichaje (Estudiante)';
+    this.notificar(`Modo cambiado a: ${rolTexto}`, 'info');
   }
 
   iniciarReloj(): void {
@@ -100,7 +109,6 @@ export class App implements OnInit, OnDestroy {
       horas = horas % 12 || 12;
       this.relojHora = `${horas.toString().padStart(2, '0')}:${mins}:${segs}`;
       
-      // Forzar actualización de vista para evitar que el reloj se congelé
       this.cdr.detectChanges();
     };
 
@@ -163,7 +171,7 @@ export class App implements OnInit, OnDestroy {
     if (reg.estado === 'En Turno') {
       reg.estado = 'En Pausa';
       reg.horaPausaInicio = horaActual;
-      this.notificar(`Receso iniciado para ${reg.empleadoNombre}`, 'info');
+      this.notificar(`Pausa iniciada para ${reg.empleadoNombre}`, 'info');
     } else if (reg.estado === 'En Pausa') {
       reg.estado = 'En Turno';
       reg.horaPausaFin = horaActual;
@@ -190,6 +198,11 @@ export class App implements OnInit, OnDestroy {
       const coincideEstado = this.filtroEstado === 'TODOS' || r.estado === this.filtroEstado;
       return coincideBusqueda && coincideEstado;
     });
+  }
+
+  get misRegistrosEstudiante(): Registro[] {
+    if (!this.empleadoSeleccionado) return [];
+    return this.registros.filter(r => r.empleadoId === this.empleadoSeleccionado?.id);
   }
 
   get totalEmpleados(): number { return this.empleados.length; }
