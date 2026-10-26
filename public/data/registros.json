@@ -1,25 +1,43 @@
 {
   "empresa": {
-    "nombre": "TechServices Corp",
-    "sucursal": "Sede Central",
-    "codigo": "EMP-2026"
+    "nombre": "Mastache Servicio",
+    "sucursal": "UTNG",
+    "codigo": "UTNG-2026",
+    "horario": "02:00 PM - 07:00 PM"
   },
   "empleados": [
-    { "id": 1, "nombre": "Juan Pérez", "puesto": "Técnico de Servicio", "departamento": "Soporte", "avatar": "👨‍🔧" },
-    { "id": 2, "nombre": "María Rodríguez", "puesto": "Supervisora Operativa", "departamento": "Logística", "avatar": "👩‍💼" }
+    { "id": 1, "nombre": "Francisco Javier González García", "puesto": "Estudiante", "departamento": "Edificio D", "avatar": "👨‍🎓", "tarifaHora": 0 },
+    { "id": 2, "nombre": "Ángel Uriel Sánchez Lara", "puesto": "Estudiante", "departamento": "Edificio D", "avatar": "👨‍🎓", "tarifaHora": 0 },
+    { "id": 3, "nombre": "Nataly Ramírez Godoy", "puesto": "Estudiante", "departamento": "Edificio D", "avatar": "👩‍🎓", "tarifaHora": 0 },
+    { "id": 4, "nombre": "Sofía Valentina Mendoza Castro", "puesto": "Estudiante", "departamento": "Edificio D", "avatar": "👩‍🎓", "tarifaHora": 0 },
+    { "id": 5, "nombre": "Carlos Eduardo López Hernández", "puesto": "Estudiante", "departamento": "Edificio D", "avatar": "👨‍🎓", "tarifaHora": 0 }
   ],
   "registros": [
     {
       "id": 101,
       "empleadoId": 1,
-      "empleadoNombre": "Juan Pérez",
-      "puesto": "Técnico de Servicio",
-      "departamento": "Soporte",
+      "empleadoNombre": "Francisco Javier González García",
+      "puesto": "Estudiante",
+      "departamento": "Edificio D",
       "fecha": "25/10/2026",
-      "horaEntrada": "08:00:00 a. m.",
-      "horaSalida": "05:00:00 p. m.",
-      "totalHoras": "9.0 hrs",
-      "estado": "Completado"
+      "horaEntrada": "02:00:00 p. m.",
+      "horaSalida": "07:00:00 p. m.",
+      "totalHoras": "5.0 hrs",
+      "estado": "Completado",
+      "observacion": "Clasificación y digitalización de documentos"
+    },
+    {
+      "id": 102,
+      "empleadoId": 3,
+      "empleadoNombre": "Nataly Ramírez Godoy",
+      "puesto": "Estudiante",
+      "departamento": "Edificio D",
+      "fecha": "25/10/2026",
+      "horaEntrada": "02:05:00 p. m.",
+      "horaSalida": "",
+      "totalHoras": "",
+      "estado": "En Turno",
+      "observacion": "Limpieza y acomodo de equipo en laboratorio"
     }
   ]
 }
