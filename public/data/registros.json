@@ -1,0 +1,25 @@
+{
+  "empresa": {
+    "nombre": "TechServices Corp",
+    "sucursal": "Sede Central",
+    "codigo": "EMP-2026"
+  },
+  "empleados": [
+    { "id": 1, "nombre": "Juan Pérez", "puesto": "Técnico de Servicio", "departamento": "Soporte", "avatar": "👨‍🔧" },
+    { "id": 2, "nombre": "María Rodríguez", "puesto": "Supervisora Operativa", "departamento": "Logística", "avatar": "👩‍💼" }
+  ],
+  "registros": [
+    {
+      "id": 101,
+      "empleadoId": 1,
+      "empleadoNombre": "Juan Pérez",
+      "puesto": "Técnico de Servicio",
+      "departamento": "Soporte",
+      "fecha": "25/10/2026",
+      "horaEntrada": "08:00:00 a. m.",
+      "horaSalida": "05:00:00 p. m.",
+      "totalHoras": "9.0 hrs",
+      "estado": "Completado"
+    }
+  ]
+}
