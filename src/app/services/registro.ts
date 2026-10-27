@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Firestore, collection, collectionData, addDoc, updateDoc, deleteDoc, doc } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
 export interface Empresa {
@@ -10,7 +10,7 @@ export interface Empresa {
 }
 
 export interface Empleado {
-  id: number;
+  id: string | number;
   nombre: string;
   puesto: string;
   departamento: string;
@@ -19,8 +19,8 @@ export interface Empleado {
 }
 
 export interface Registro {
-  id: number;
-  empleadoId: number;
+  id?: string;
+  empleadoId: string | number;
   empleadoNombre: string;
   puesto: string;
   departamento: string;
@@ -38,11 +38,25 @@ export interface Registro {
   providedIn: 'root'
 })
 export class RegistroService {
-  private jsonUrl = 'data/registros.json';
+  constructor(private firestore: Firestore) {}
 
-  constructor(private http: HttpClient) {}
+  getRegistros(): Observable<Registro[]> {
+    const registrosRef = collection(this.firestore, 'registros');
+    return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
+  }
 
-  getDatosIniciales(): Observable<any> {
-    return this.http.get<any>(this.jsonUrl);
+  agregarRegistro(registro: Registro) {
+    const registrosRef = collection(this.firestore, 'registros');
+    return addDoc(registrosRef, registro);
+  }
+
+  actualizarRegistro(id: string, data: Partial<Registro>) {
+    const registroDoc = doc(this.firestore, `registros/${id}`);
+    return updateDoc(registroDoc, data);
+  }
+
+  eliminarRegistro(id: string) {
+    const registroDoc = doc(this.firestore, `registros/${id}`);
+    return deleteDoc(registroDoc);
   }
 }

@@ -11,14 +11,26 @@ import { RegistroService, Empresa, Empleado, Registro } from './services/registr
   styleUrl: './app.css'
 })
 export class App implements OnInit, OnDestroy {
-  // Control de Vista / Rol ('estudiante' | 'admin')
   vistaActual: 'estudiante' | 'admin' = 'estudiante';
 
-  empresa: Empresa = { nombre: 'Mastache Servicio', sucursal: 'UTNG', codigo: 'UTNG-2026', horario: '02:00 PM - 07:00 PM' };
-  empleados: Empleado[] = [];
+  empresa: Empresa = { 
+    nombre: 'Mastache Servicio', 
+    sucursal: 'UTNG', 
+    codigo: 'UTNG-2026', 
+    horario: '02:00 PM - 07:00 PM' 
+  };
+
+  empleados: Empleado[] = [
+    { id: '1', nombre: 'Francisco Javier González García', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 },
+    { id: '2', nombre: 'Ángel Uriel Sánchez Lara', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 },
+    { id: '3', nombre: 'Nataly Ramírez Godoy', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👩‍🎓', tarifaHora: 0 },
+    { id: '4', nombre: 'Sofía Valentina Mendoza Castro', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👩‍🎓', tarifaHora: 0 },
+    { id: '5', nombre: 'Carlos Eduardo López Hernández', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 }
+  ];
+
   registros: Registro[] = [];
 
-  empleadoSeleccionadoId: number = 0;
+  empleadoSeleccionadoId: string | number = '1';
   empleadoSeleccionado: Empleado | null = null;
   observacionActual: string = '';
 
@@ -26,7 +38,7 @@ export class App implements OnInit, OnDestroy {
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
 
-  // Reloj Digital Continuo
+  // Reloj Digital
   relojHora: string = '00:00:00';
   relojAmPm: string = 'PM';
   relojFecha: string = '';
@@ -59,21 +71,18 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.iniciarReloj();
+    this.alCambiarEmpleado();
 
-    this.registroService.getDatosIniciales().subscribe({
-      next: (data) => {
-        if (data.empresa) this.empresa = data.empresa;
-        this.empleados = data.empleados || [];
-        this.registros = data.registros || [];
-
-        if (this.empleados.length > 0) {
-          this.empleadoSeleccionadoId = this.empleados[0].id;
-          this.alCambiarEmpleado();
+    // Sincronización en tiempo real desde Cloud Firestore
+    this.registroService.getRegistros().subscribe({
+      next: (data: Registro[]) => {
+        if (data) {
+          this.registros = data;
         }
       },
-      error: (err) => {
-        console.error('Error al cargar datos JSON:', err);
-        this.notificar('Error al cargar la base de datos inicial', 'alerta');
+      error: (err: any) => {
+        console.error('Error al conectar con Firestore:', err);
+        this.notificar('Error de conexión con Firestore', 'alerta');
       }
     });
   }
@@ -86,8 +95,8 @@ export class App implements OnInit, OnDestroy {
 
   cambiarVista(nuevaVista: 'estudiante' | 'admin'): void {
     this.vistaActual = nuevaVista;
-    const rolTexto = nuevaVista === 'admin' ? 'Panel Administrador (Docente)' : 'Terminal de Fichaje (Estudiante)';
-    this.notificar(`Modo cambiado a: ${rolTexto}`, 'info');
+    const rolTexto = nuevaVista === 'admin' ? 'Panel Administrador' : 'Terminal Estudiante';
+    this.notificar(`Vista cambiada a: ${rolTexto}`, 'info');
   }
 
   iniciarReloj(): void {
@@ -126,12 +135,12 @@ export class App implements OnInit, OnDestroy {
   }
 
   alCambiarEmpleado(): void {
-    this.empleadoSeleccionado = this.empleados.find(e => e.id === Number(this.empleadoSeleccionadoId)) || null;
+    this.empleadoSeleccionado = this.empleados.find(e => String(e.id) === String(this.empleadoSeleccionadoId)) || null;
   }
 
   get registroActivo(): Registro | undefined {
     if (!this.empleadoSeleccionado) return undefined;
-    return this.registros.find(r => r.empleadoId === this.empleadoSeleccionado?.id && (r.estado === 'En Turno' || r.estado === 'En Pausa'));
+    return this.registros.find(r => String(r.empleadoId) === String(this.empleadoSeleccionado?.id) && (r.estado === 'En Turno' || r.estado === 'En Pausa'));
   }
 
   get estaEnTurno(): boolean {
@@ -147,7 +156,6 @@ export class App implements OnInit, OnDestroy {
 
     const ahora = new Date();
     const nuevo: Registro = {
-      id: Date.now(),
       empleadoId: this.empleadoSeleccionado.id,
       empleadoNombre: this.empleadoSeleccionado.nombre,
       puesto: this.empleadoSeleccionado.puesto,
@@ -158,36 +166,45 @@ export class App implements OnInit, OnDestroy {
       observacion: this.observacionActual.trim() || 'Acomodo y clasificación de documentos'
     };
 
-    this.registros.unshift(nuevo);
-    this.notificar(`Entrada registrada para ${this.empleadoSeleccionado.nombre}`, 'exito');
-    this.observacionActual = '';
+    this.registroService.agregarRegistro(nuevo).then(() => {
+      this.notificar(`Entrada registrada para ${this.empleadoSeleccionado?.nombre}`, 'exito');
+      this.observacionActual = '';
+    }).catch((err: any) => {
+      console.error(err);
+      this.notificar('Error al guardar en Firebase', 'alerta');
+    });
   }
 
   conmutarPausa(): void {
     const reg = this.registroActivo;
-    if (!reg) return;
+    if (!reg || !reg.id) return;
 
     const horaActual = new Date().toLocaleTimeString('es-ES');
-    if (reg.estado === 'En Turno') {
-      reg.estado = 'En Pausa';
-      reg.horaPausaInicio = horaActual;
-      this.notificar(`Pausa iniciada para ${reg.empleadoNombre}`, 'info');
-    } else if (reg.estado === 'En Pausa') {
-      reg.estado = 'En Turno';
-      reg.horaPausaFin = horaActual;
-      this.notificar(`Servicio reanudado para ${reg.empleadoNombre}`, 'exito');
-    }
+    const esTurno = reg.estado === 'En Turno';
+    const datosActualizar: Partial<Registro> = {
+      estado: esTurno ? 'En Pausa' : 'En Turno',
+      ...(esTurno ? { horaPausaInicio: horaActual } : { horaPausaFin: horaActual })
+    };
+
+    this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
+      this.notificar(`Estado actualizado para ${reg.empleadoNombre}`, 'info');
+    }).catch((err: any) => console.error(err));
   }
 
   marcarSalida(): void {
     const reg = this.registroActivo;
-    if (!reg) return;
+    if (!reg || !reg.id) return;
 
     const ahora = new Date();
-    reg.horaSalida = ahora.toLocaleTimeString('es-ES');
-    reg.estado = 'Completado';
-    reg.totalHoras = 'Turno Finalizado';
-    this.notificar(`Salida registrada para ${reg.empleadoNombre}`, 'alerta');
+    const datosActualizar: Partial<Registro> = {
+      horaSalida: ahora.toLocaleTimeString('es-ES'),
+      estado: 'Completado',
+      totalHoras: 'Turno Finalizado'
+    };
+
+    this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
+      this.notificar(`Salida registrada para ${reg.empleadoNombre}`, 'alerta');
+    }).catch((err: any) => console.error(err));
   }
 
   get registrosFiltrados(): Registro[] {
@@ -202,7 +219,7 @@ export class App implements OnInit, OnDestroy {
 
   get misRegistrosEstudiante(): Registro[] {
     if (!this.empleadoSeleccionado) return [];
-    return this.registros.filter(r => r.empleadoId === this.empleadoSeleccionado?.id);
+    return this.registros.filter(r => String(r.empleadoId) === String(this.empleadoSeleccionado?.id));
   }
 
   get totalEmpleados(): number { return this.empleados.length; }
@@ -210,9 +227,11 @@ export class App implements OnInit, OnDestroy {
   get personalEnPausa(): number { return this.registros.filter(r => r.estado === 'En Pausa').length; }
   get totalCompletados(): number { return this.registros.filter(r => r.estado === 'Completado').length; }
 
-  eliminarRegistro(id: number): void {
-    this.registros = this.registros.filter(r => r.id !== id);
-    this.notificar('Registro eliminado del historial', 'info');
+  eliminarRegistro(id?: string): void {
+    if (!id) return;
+    this.registroService.eliminarRegistro(id).then(() => {
+      this.notificar('Registro eliminado de Firebase', 'info');
+    }).catch((err: any) => console.error(err));
   }
 
   abrirModalEmpleado(): void { this.mostrarModalEmpleado = true; }
@@ -224,7 +243,7 @@ export class App implements OnInit, OnDestroy {
     if (!this.nuevoEmpleado.nombre) return;
 
     const emp: Empleado = {
-      id: Date.now(),
+      id: Date.now().toString(),
       nombre: this.nuevoEmpleado.nombre,
       puesto: this.nuevoEmpleado.puesto,
       departamento: this.nuevoEmpleado.departamento,
@@ -248,7 +267,7 @@ export class App implements OnInit, OnDestroy {
 
     let csv = "ID,Estudiante,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Realizada\n";
     this.registros.forEach(r => {
-      csv += `${r.id},"${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}"\n`;
+      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}"\n`;
     });
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
