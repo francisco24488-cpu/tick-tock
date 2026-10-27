@@ -1,76 +1,81 @@
 <div class="dashboard-container">
-  <!-- Toast Notification -->
+  <!-- Notificación Toast -->
   <div class="toast-notification" [class.show]="mostrarToast" [ngClass]="tipoToast">
     <span class="toast-icon">
-      {{ tipoToast === 'exito' ? '✨' : (tipoToast === 'alerta' ? '⚠️' : 'ℹ️') }}
+      {{ tipoToast === 'exito' ? '✅' : (tipoToast === 'alerta' ? '⚠️' : 'ℹ️') }}
     </span>
     <span>{{ mensajeToast }}</span>
   </div>
 
-  <!-- Barra Superior de Conmutación de Rol / Pantalla -->
-  <div class="role-switcher-bar">
-    <div class="role-switcher-inner">
-      <span class="switcher-label">👁️ Vista Actual:</span>
-      <button 
-        class="role-btn" 
-        [class.active]="vistaActual === 'estudiante'" 
-        (click)="cambiarVista('estudiante')">
-        🎓 Terminal Estudiante
-      </button>
-      <button 
-        class="role-btn btn-admin" 
-        [class.active]="vistaActual === 'admin'" 
-        (click)="cambiarVista('admin')">
-        👑 Panel Administrador (Mastache)
-      </button>
-    </div>
-  </div>
-
-  <header class="navbar">
-    <div class="brand-box">
-      <div class="company-icon">🏫</div>
-      <div class="company-info">
-        <div class="company-title-row">
-          <h1>{{ empresa.nombre }}</h1>
-          <button class="edit-chip" *ngIf="vistaActual === 'admin'" (click)="abrirModalEmpresa()" title="Editar Configuración">✏️ Ajustes</button>
-        </div>
-        <p class="company-subtitle">
-          📍 <strong>{{ empresa.sucursal }}</strong> • Cód: <code>{{ empresa.codigo }}</code> | Horario: <strong>{{ empresa.horario }}</strong>
-        </p>
+  <!-- Hero Header / Bienvenida Universitaria UTNG -->
+  <header class="welcome-hero">
+    <div class="hero-brand">
+      <div class="utng-logo-chip">UTNG</div>
+      <div>
+        <h1 class="hero-title">{{ empresa.nombre }}</h1>
+        <p class="hero-subtitle">Sistema de Control de Asistencia y Servicio Social • {{ empresa.sucursal }}</p>
       </div>
     </div>
 
-    <!-- Reloj Digital Continuo -->
-    <div class="digital-clock">
-      <div class="live-tag">
-        <span class="pulse-red"></span> EN VIVO
+    <div class="hero-actions">
+      <!-- Selector de Rol con Control de Acceso -->
+      <div class="role-selector-pills">
+        <button 
+          class="pill-btn" 
+          [class.active]="vistaActual === 'estudiante'" 
+          (click)="solicitarVista('estudiante')">
+          🎓 Terminal Estudiante
+        </button>
+        <button 
+          class="pill-btn admin-pill" 
+          [class.active]="vistaActual === 'admin'" 
+          (click)="solicitarVista('admin')">
+          👑 Panel Administrador
+        </button>
       </div>
-      <span class="clock-date">{{ relojFecha }}</span>
-      <div class="clock-display">
-        <span class="time">{{ relojHora }}</span>
-        <span class="ampm">{{ relojAmPm }}</span>
-      </div>
+
+      <button *ngIf="adminAutenticado && vistaActual === 'admin'" class="btn-logout-chip" (click)="cerrarSesionAdmin()" title="Cerrar sesión">
+        🔒 Salir Admin
+      </button>
     </div>
   </header>
 
+  <!-- Sub-Header con Info de Horarios y Reloj en Vivo -->
+  <div class="sub-bar">
+    <div class="info-chips">
+      <span class="chip">📍 Ubicación: <strong>Edificio D</strong></span>
+      <span class="chip">⏰ Horario: <strong>{{ empresa.horario }}</strong></span>
+      <span class="chip code-chip">🔑 Cód: <code>{{ empresa.codigo }}</code></span>
+    </div>
+
+    <div class="digital-clock-card">
+      <div class="clock-live-dot">
+        <span class="pulse-green"></span> EN VIVO
+      </div>
+      <div class="clock-time">
+        <span>{{ relojHora }}</span>
+        <small>{{ relojAmPm }}</small>
+      </div>
+      <div class="clock-date">{{ relojFecha }}</div>
+    </div>
+  </div>
+
   <!-- ======================================================== -->
-  <!-- VISTA 1: TERMINAL ESTUDIANTE (PANTALLA SIMPLIFICADA)      -->
+  <!-- VISTA 1: TERMINAL ESTUDIANTE (MODO KIOSCO SIMPLIFICADO)   -->
   <!-- ======================================================== -->
   <main class="main-content" *ngIf="vistaActual === 'estudiante'">
-    <section class="card action-card kiosk-card">
-      <div class="card-header center-header">
-        <div class="header-title">
-          <h2>🎓 Registro de Fichaje Estudiantil</h2>
-          <p>Selecciona tu nombre, escribe tu tarea asignada y marca tu entrada o salida</p>
-        </div>
+    <section class="card kiosk-card">
+      <div class="card-header-emerald">
+        <h2>🎓 Registro Individual de Fichaje</h2>
+        <p>Selecciona tu nombre, escribe tu actividad del día y presiona la acción correspondiente</p>
       </div>
 
-      <div class="form-row">
+      <div class="form-grid">
         <div class="form-group flex-2">
-          <label for="empSelectKiosk"><strong>¿Quién eres?:</strong></label>
-          <div class="custom-select-wrapper large-select">
-            <span class="select-avatar">{{ empleadoSeleccionado?.avatar }}</span>
-            <select id="empSelectKiosk" [(ngModel)]="empleadoSeleccionadoId" (change)="alCambiarEmpleado()">
+          <label><strong>1. Selecciona tu Nombre:</strong></label>
+          <div class="custom-select-box">
+            <span class="avatar-preview">{{ empleadoSeleccionado?.avatar }}</span>
+            <select [(ngModel)]="empleadoSeleccionadoId" (change)="alCambiarEmpleado()">
               <option *ngFor="let emp of empleados" [value]="emp.id">
                 {{ emp.avatar }} {{ emp.nombre }} ({{ emp.departamento }})
               </option>
@@ -79,115 +84,116 @@
         </div>
 
         <div class="form-group flex-1">
-          <label><strong>Actividad Realizada:</strong></label>
+          <label><strong>2. Tarea / Actividad Realizada:</strong></label>
           <input 
             type="text" 
+            class="input-emerald"
             [(ngModel)]="observacionActual" 
-            placeholder="Ej: Acomodar archivos, ordenar espacio..."
+            placeholder="Ej: Acomodo de documentos, atención en ventanilla..."
             [disabled]="estaEnTurno || estaEnPausa">
         </div>
       </div>
 
-      <div class="status-banner" *ngIf="empleadoSeleccionado">
-        <div class="profile-meta">
-          <div class="avatar-large">{{ empleadoSeleccionado.avatar }}</div>
+      <!-- Card de Estado de Servicio -->
+      <div class="status-card-box" *ngIf="empleadoSeleccionado">
+        <div class="user-meta">
+          <div class="user-avatar">{{ empleadoSeleccionado.avatar }}</div>
           <div>
             <h3>{{ empleadoSeleccionado.nombre }}</h3>
-            <span class="badge-dept">{{ empleadoSeleccionado.departamento }}</span>
-            <span class="puesto-text">• {{ empleadoSeleccionado.puesto }}</span>
+            <span class="badge-dept-green">{{ empleadoSeleccionado.departamento }}</span>
+            <span class="badge-puesto">• {{ empleadoSeleccionado.puesto }}</span>
           </div>
         </div>
 
-        <div class="live-status-pill" [ngClass]="{'status-turno': estaEnTurno, 'status-pausa': estaEnPausa, 'status-fuera': !estaEnTurno && !estaEnPausa}">
-          <span class="glow-dot"></span>
-          <span>ESTADO: <strong>{{ estaEnTurno ? 'EN SERVICIO ACTIVO' : (estaEnPausa ? 'EN RECESO' : 'SIN MARCAJE ACTIVO') }}</strong></span>
+        <div class="status-indicator" [ngClass]="{'is-turno': estaEnTurno, 'is-pausa': estaEnPausa, 'is-off': !estaEnTurno && !estaEnPausa}">
+          <span class="status-dot"></span>
+          <span>ESTADO: <strong>{{ estaEnTurno ? 'EN SERVICIO ACTIVO' : (estaEnPausa ? 'EN PAUSA' : 'SIN MARCAJE') }}</strong></span>
         </div>
       </div>
 
-      <div class="action-buttons-row">
+      <!-- Botones Principales de Fichaje -->
+      <div class="kiosk-buttons-grid">
         <button 
-          class="btn-action btn-in" 
+          class="btn-kiosk btn-green" 
           (click)="marcarEntrada()" 
           [disabled]="estaEnTurno || estaEnPausa">
-          <span class="btn-emoji">🟢</span>
-          <div class="btn-text">
+          <span class="kiosk-icon">🟢</span>
+          <div>
             <strong>MARCAR ENTRADA</strong>
-            <small>Registrar Llegada</small>
+            <small>Registrar Hora de Llegada</small>
           </div>
         </button>
 
         <button 
-          class="btn-action btn-pause" 
+          class="btn-kiosk btn-amber" 
           (click)="conmutarPausa()" 
           [disabled]="!estaEnTurno && !estaEnPausa">
-          <span class="btn-emoji">{{ estaEnPausa ? '▶️' : '☕' }}</span>
-          <div class="btn-text">
-            <strong>{{ estaEnPausa ? 'REANUDAR' : 'INICIAR RECESO' }}</strong>
-            <small>{{ estaEnPausa ? 'Volver al trabajo' : 'Pausa de 15 min' }}</small>
+          <span class="kiosk-icon">{{ estaEnPausa ? '▶️' : '☕' }}</span>
+          <div>
+            <strong>{{ estaEnPausa ? 'REANUDAR' : 'INICIAR PAUSA' }}</strong>
+            <small>{{ estaEnPausa ? 'Volver al Servicio' : 'Receso de 15 minutos' }}</small>
           </div>
         </button>
 
         <button 
-          class="btn-action btn-out" 
+          class="btn-kiosk btn-red" 
           (click)="marcarSalida()" 
           [disabled]="!estaEnTurno && !estaEnPausa">
-          <span class="btn-emoji">🔴</span>
-          <div class="btn-text">
+          <span class="kiosk-icon">🔴</span>
+          <div>
             <strong>MARCAR SALIDA</strong>
-            <small>Registrar Hora de Salida</small>
+            <small>Finalizar Turno del Día</small>
           </div>
         </button>
       </div>
     </section>
 
-    <!-- Resumen personal de marcajes para el estudiante sin opciones de borrado -->
+    <!-- Historial Estudiantil Individual -->
     <section class="card table-card">
-      <div class="table-toolbar">
-        <div class="toolbar-title">
-          <h3>📋 Mis Registros Recientes</h3>
-          <span class="records-count">Historial individual de {{ empleadoSeleccionado?.nombre }}</span>
-        </div>
+      <div class="table-header-bar">
+        <h3>📋 Mis Registros Recientes</h3>
+        <span class="records-tag">Mostrando historial de {{ empleadoSeleccionado?.nombre }}</span>
       </div>
 
       <div class="table-responsive">
-        <table>
+        <table class="emerald-table">
           <thead>
             <tr>
               <th>Fecha</th>
-              <th>Hora Entrada</th>
+              <th>Entrada</th>
               <th>Pausa</th>
-              <th>Hora Salida</th>
+              <th>Salida</th>
               <th>Estado</th>
-              <th>Actividad</th>
+              <th>Actividad Realizada</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let reg of misRegistrosEstudiante">
-              <td>{{ reg.fecha }}</td>
-              <td><span class="time-tag in">🟢 {{ reg.horaEntrada }}</span></td>
+              <td><strong>{{ reg.fecha }}</strong></td>
+              <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
               <td>
-                <span class="time-tag pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span>
-                <span class="muted-dash" *ngIf="!reg.horaPausaInicio">--:--</span>
+                <span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span>
+                <span class="muted-text" *ngIf="!reg.horaPausaInicio">--:--</span>
               </td>
               <td>
-                <span class="time-tag out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span>
-                <span class="muted-dash" *ngIf="!reg.horaSalida">--:--:--</span>
+                <span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span>
+                <span class="muted-text" *ngIf="!reg.horaSalida">--:--:--</span>
               </td>
               <td>
-                <span class="status-badge" [ngClass]="{
-                  'badge-turno': reg.estado === 'En Turno',
-                  'badge-pausa': reg.estado === 'En Pausa',
-                  'badge-completed': reg.estado === 'Completado'
+                <span class="badge-status" [ngClass]="{
+                  'st-turno': reg.estado === 'En Turno',
+                  'st-pausa': reg.estado === 'En Pausa',
+                  'st-completado': reg.estado === 'Completado'
                 }">
                   {{ reg.estado }}
                 </span>
               </td>
-              <td class="obs-cell">{{ reg.observacion || 'Sin actividad' }}</td>
+              <td>{{ reg.observacion || 'Sin actividad registrada' }}</td>
             </tr>
 
             <tr *ngIf="misRegistrosEstudiante.length === 0">
-              <td colspan="6" class="empty-state">
-                📭 Aún no tienes marcajes registrados hoy.
+              <td colspan="6" class="empty-row">
+                📭 No tienes registros almacenados hoy.
               </td>
             </tr>
           </tbody>
@@ -197,128 +203,130 @@
   </main>
 
   <!-- ======================================================== -->
-  <!-- VISTA 2: PANEL ADMINISTRADOR (DOCENTE / MASTACHE)         -->
+  <!-- VISTA 2: PANEL ADMINISTRADOR (EXCLUSIVO DOCENTE/MASTACHE)  -->
   <!-- ======================================================== -->
   <main class="main-content" *ngIf="vistaActual === 'admin'">
+    <!-- Métricas KPI -->
     <section class="kpi-grid">
-      <div class="kpi-card blue">
-        <div class="kpi-icon">🎓</div>
-        <div class="kpi-data">
+      <div class="kpi-box white-card">
+        <div class="kpi-icon icon-green">🎓</div>
+        <div>
           <h3>{{ totalEmpleados }}</h3>
-          <span>Estudiantes Totales</span>
+          <span>Estudiantes Registrados</span>
         </div>
       </div>
 
-      <div class="kpi-card green">
-        <div class="kpi-icon">🟢</div>
-        <div class="kpi-data">
+      <div class="kpi-box white-card">
+        <div class="kpi-icon icon-emerald">🟢</div>
+        <div>
           <h3>{{ personalEnTurno }}</h3>
           <span>En Servicio Activo</span>
         </div>
       </div>
 
-      <div class="kpi-card amber">
-        <div class="kpi-icon">☕</div>
-        <div class="kpi-data">
+      <div class="kpi-box white-card">
+        <div class="kpi-icon icon-amber">☕</div>
+        <div>
           <h3>{{ personalEnPausa }}</h3>
           <span>En Receso</span>
         </div>
       </div>
 
-      <div class="kpi-card purple">
-        <div class="kpi-icon">✅</div>
-        <div class="kpi-data">
+      <div class="kpi-box white-card">
+        <div class="kpi-icon icon-blue">✅</div>
+        <div>
           <h3>{{ totalCompletados }}</h3>
           <span>Turnos Concluidos</span>
         </div>
       </div>
     </section>
 
+    <!-- Bitácora y Control Completo -->
     <section class="card table-card">
-      <div class="table-toolbar">
-        <div class="toolbar-title">
-          <h3>📊 Panel de Control y Bitácora General</h3>
-          <span class="records-count">{{ registrosFiltrados.length }} registros en sistema</span>
+      <div class="table-header-bar admin-header">
+        <div>
+          <h3>📊 Bitácora General de Asistencia</h3>
+          <span class="records-tag">{{ registrosFiltrados.length }} marcajes sincronizados con Firebase</span>
         </div>
 
-        <div class="toolbar-controls">
-          <button class="btn-add-user" (click)="abrirModalEmpleado()">
-            ➕ Nuevo Estudiante
+        <div class="admin-toolbar">
+          <button class="btn-emerald-add" (click)="abrirModalEmpleado()">
+            ➕ Registrar Nuevo Estudiante
+          </button>
+
+          <button class="btn-emerald-config" (click)="abrirModalEmpresa()">
+            ⚙️ Configurar Empresa
           </button>
 
           <input 
             type="text" 
-            class="search-input" 
+            class="search-emerald" 
             [(ngModel)]="busquedaEmpleado" 
-            placeholder="🔍 Buscar estudiante o tarea...">
+            placeholder="🔍 Buscar por nombre o tarea...">
 
-          <select class="filter-select" [(ngModel)]="filtroEstado">
+          <select class="select-emerald" [(ngModel)]="filtroEstado">
             <option value="TODOS">Todos los estados</option>
             <option value="En Turno">🟢 En Turno</option>
             <option value="En Pausa">☕ En Pausa</option>
             <option value="Completado">✅ Completados</option>
           </select>
 
-          <button class="btn-export" (click)="exportarCSV()" title="Descargar CSV Excel">
+          <button class="btn-export-emerald" (click)="exportarCSV()">
             📥 Exportar CSV
           </button>
         </div>
       </div>
 
       <div class="table-responsive">
-        <table>
+        <table class="emerald-table">
           <thead>
             <tr>
               <th>Estudiante</th>
-              <th>Depto. / Puesto</th>
+              <th>Ubicación / Puesto</th>
               <th>Fecha</th>
-              <th>Hora Entrada</th>
+              <th>Entrada</th>
               <th>Pausa</th>
-              <th>Hora Salida</th>
+              <th>Salida</th>
               <th>Estado</th>
-              <th>Actividad Realizada</th>
+              <th>Actividad</th>
               <th>Acción</th>
             </tr>
           </thead>
           <tbody>
             <tr *ngFor="let reg of registrosFiltrados">
+              <td><strong>{{ reg.empleadoNombre }}</strong></td>
               <td>
-                <div class="employee-cell">
-                  <strong>{{ reg.empleadoNombre }}</strong>
-                </div>
-              </td>
-              <td>
-                <span class="tag-dept">{{ reg.departamento }}</span>
-                <small class="block-sub">{{ reg.puesto }}</small>
+                <span class="badge-dept-green">{{ reg.departamento }}</span>
+                <small class="block-puesto">{{ reg.puesto }}</small>
               </td>
               <td>{{ reg.fecha }}</td>
-              <td><span class="time-tag in">🟢 {{ reg.horaEntrada }}</span></td>
+              <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
               <td>
-                <span class="time-tag pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span>
-                <span class="muted-dash" *ngIf="!reg.horaPausaInicio">--:--</span>
+                <span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span>
+                <span class="muted-text" *ngIf="!reg.horaPausaInicio">--:--</span>
               </td>
               <td>
-                <span class="time-tag out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span>
-                <span class="muted-dash" *ngIf="!reg.horaSalida">--:--:--</span>
+                <span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span>
+                <span class="muted-text" *ngIf="!reg.horaSalida">--:--:--</span>
               </td>
               <td>
-                <span class="status-badge" [ngClass]="{
-                  'badge-turno': reg.estado === 'En Turno',
-                  'badge-pausa': reg.estado === 'En Pausa',
-                  'badge-completed': reg.estado === 'Completado'
+                <span class="badge-status" [ngClass]="{
+                  'st-turno': reg.estado === 'En Turno',
+                  'st-pausa': reg.estado === 'En Pausa',
+                  'st-completado': reg.estado === 'Completado'
                 }">
                   {{ reg.estado }}
                 </span>
               </td>
-              <td class="obs-cell">{{ reg.observacion || 'Sin actividad registrada' }}</td>
+              <td class="obs-cell">{{ reg.observacion || 'Sin actividad' }}</td>
               <td>
-                <button class="btn-delete" (click)="eliminarRegistro(reg.id)" title="Eliminar registro">🗑️</button>
+                <button class="btn-delete-row" (click)="eliminarRegistro(reg.id)" title="Eliminar registro">🗑️</button>
               </td>
             </tr>
 
             <tr *ngIf="registrosFiltrados.length === 0">
-              <td colspan="9" class="empty-state">
-                🔍 No se encontraron registros con los criterios seleccionados.
+              <td colspan="9" class="empty-row">
+                🔍 No se encontraron registros coincidentes.
               </td>
             </tr>
           </tbody>
@@ -327,42 +335,72 @@
     </section>
   </main>
 
-  <!-- Modales sólo accesibles por el Administrador -->
-  <div class="modal-overlay" *ngIf="mostrarModalEmpleado && vistaActual === 'admin'">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>➕ Registrar Nuevo Estudiante</h3>
-        <button class="btn-close" (click)="cerrarModalEmpleado()">✕</button>
+  <!-- MODAL DE ACCESO / CONTRASEÑA PARA EL ADMINISTRADOR -->
+  <div class="modal-overlay" *ngIf="mostrarModalAuth">
+    <div class="modal-card auth-modal">
+      <div class="modal-header-emerald">
+        <h3>🔒 Acceso Restringido - Administrador</h3>
+        <button class="btn-modal-close" (click)="cerrarModalAuth()">✕</button>
       </div>
 
       <div class="modal-body">
-        <div class="modal-form-group">
-          <label>Nombre Completo:</label>
-          <input type="text" [(ngModel)]="nuevoEmpleado.nombre" placeholder="Ej: Luis Miguel Hernández">
+        <p class="auth-instruction">Introduce la clave de acceso de administrador para ingresar al panel de control:</p>
+
+        <div class="form-group margin-top">
+          <label>Contraseña de Administrador:</label>
+          <input 
+            type="password" 
+            class="input-emerald large-input" 
+            [(ngModel)]="inputPasswordAdmin" 
+            (keyup.enter)="validarPasswordAdmin()"
+            placeholder="Introduce la contraseña (Ej: utng2026)"
+            autofocus>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-cancel" (click)="cerrarModalAuth()">Cancelar</button>
+        <button class="btn-confirm-emerald" (click)="validarPasswordAdmin()">Entrar al Panel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: AGREGAR ESTUDIANTE -->
+  <div class="modal-overlay" *ngIf="mostrarModalEmpleado && vistaActual === 'admin'">
+    <div class="modal-card">
+      <div class="modal-header-emerald">
+        <h3>➕ Registrar Nuevo Estudiante</h3>
+        <button class="btn-modal-close" (click)="cerrarModalEmpleado()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nombre Completo del Estudiante:</label>
+          <input type="text" class="input-emerald" [(ngModel)]="nuevoEmpleado.nombre" placeholder="Ej: María José Morales">
         </div>
 
-        <div class="modal-form-row">
-          <div class="modal-form-group flex-1">
-            <label>Departamento:</label>
-            <select [(ngModel)]="nuevoEmpleado.departamento">
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>Departamento / Edificio:</label>
+            <select class="select-emerald" [(ngModel)]="nuevoEmpleado.departamento">
               <option *ngFor="let dep of departamentos" [value]="dep">{{ dep }}</option>
             </select>
           </div>
 
-          <div class="modal-form-group flex-1">
-            <label>Puesto:</label>
-            <input type="text" [(ngModel)]="nuevoEmpleado.puesto" readonly>
+          <div class="form-group flex-1">
+            <label>Rol:</label>
+            <input type="text" class="input-emerald" [(ngModel)]="nuevoEmpleado.puesto" readonly>
           </div>
         </div>
 
-        <div class="modal-form-group">
-          <label>Icono / Avatar:</label>
-          <div class="avatar-grid">
+        <div class="form-group">
+          <label>Selecciona un Avatar:</label>
+          <div class="avatar-selector-grid">
             <button 
               *ngFor="let av of avatares" 
-              type="button"
-              class="avatar-option" 
-              [class.active]="nuevoEmpleado.avatar === av"
+              type="button" 
+              class="avatar-btn" 
+              [class.selected]="nuevoEmpleado.avatar === av"
               (click)="nuevoEmpleado.avatar = av">
               {{ av }}
             </button>
@@ -372,43 +410,44 @@
 
       <div class="modal-footer">
         <button class="btn-cancel" (click)="cerrarModalEmpleado()">Cancelar</button>
-        <button class="btn-confirm" (click)="guardarNuevoEmpleado()">Guardar Estudiante</button>
+        <button class="btn-confirm-emerald" (click)="guardarNuevoEmpleado()">Guardar en Sistema</button>
       </div>
     </div>
   </div>
 
+  <!-- MODAL: CONFIGURAR EMPRESA -->
   <div class="modal-overlay" *ngIf="mostrarModalEmpresa && vistaActual === 'admin'">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>🏫 Configuración de la Sucursal</h3>
-        <button class="btn-close" (click)="cerrarModalEmpresa()">✕</button>
+    <div class="modal-card">
+      <div class="modal-header-emerald">
+        <h3>⚙️ Ajustes de la Sucursal / Proyecto</h3>
+        <button class="btn-modal-close" (click)="cerrarModalEmpresa()">✕</button>
       </div>
 
       <div class="modal-body">
-        <div class="modal-form-group">
-          <label>Nombre de Empresa / Servicio:</label>
-          <input type="text" [(ngModel)]="empresa.nombre">
+        <div class="form-group">
+          <label>Nombre del Servicio:</label>
+          <input type="text" class="input-emerald" [(ngModel)]="empresa.nombre">
         </div>
 
-        <div class="modal-form-group">
-          <label>Sucursal / Universidad:</label>
-          <input type="text" [(ngModel)]="empresa.sucursal">
+        <div class="form-group">
+          <label>Ubicación / Campus:</label>
+          <input type="text" class="input-emerald" [(ngModel)]="empresa.sucursal">
         </div>
 
-        <div class="modal-form-row">
-          <div class="modal-form-group flex-1">
+        <div class="form-row">
+          <div class="form-group flex-1">
             <label>Código:</label>
-            <input type="text" [(ngModel)]="empresa.codigo">
+            <input type="text" class="input-emerald" [(ngModel)]="empresa.codigo">
           </div>
-          <div class="modal-form-group flex-1">
+          <div class="form-group flex-1">
             <label>Horario del Servicio:</label>
-            <input type="text" [(ngModel)]="empresa.horario">
+            <input type="text" class="input-emerald" [(ngModel)]="empresa.horario">
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn-confirm" (click)="cerrarModalEmpresa()">Guardar Cambios</button>
+        <button class="btn-confirm-emerald" (click)="cerrarModalEmpresa()">Guardar Cambios</button>
       </div>
     </div>
   </div>

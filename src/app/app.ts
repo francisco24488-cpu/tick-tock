@@ -11,11 +11,18 @@ import { RegistroService, Empresa, Empleado, Registro } from './services/registr
   styleUrl: './app.css'
 })
 export class App implements OnInit, OnDestroy {
+  // Control de Vista / Rol ('estudiante' | 'admin')
   vistaActual: 'estudiante' | 'admin' = 'estudiante';
+
+  // Seguridad y Autenticación del Administrador
+  adminAutenticado: boolean = false;
+  mostrarModalAuth: boolean = false;
+  inputPasswordAdmin: string = '';
+  readonly passCorrectoAdmin: string = 'utng2026'; // Contraseña por defecto
 
   empresa: Empresa = { 
     nombre: 'Mastache Servicio', 
-    sucursal: 'UTNG', 
+    sucursal: 'Edificio D - UTNG', 
     codigo: 'UTNG-2026', 
     horario: '02:00 PM - 07:00 PM' 
   };
@@ -49,7 +56,7 @@ export class App implements OnInit, OnDestroy {
   mensajeToast: string = '';
   tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
 
-  // Modales
+  // Modales Administrador
   mostrarModalEmpleado: boolean = false;
   mostrarModalEmpresa: boolean = false;
 
@@ -73,7 +80,7 @@ export class App implements OnInit, OnDestroy {
     this.iniciarReloj();
     this.alCambiarEmpleado();
 
-    // Sincronización en tiempo real desde Cloud Firestore
+    // Carga de datos en tiempo real desde Cloud Firestore
     this.registroService.getRegistros().subscribe({
       next: (data: Registro[]) => {
         if (data) {
@@ -82,7 +89,7 @@ export class App implements OnInit, OnDestroy {
       },
       error: (err: any) => {
         console.error('Error al conectar con Firestore:', err);
-        this.notificar('Error de conexión con Firestore', 'alerta');
+        this.notificar('Error de sincronización con la base de datos', 'alerta');
       }
     });
   }
@@ -93,10 +100,43 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  cambiarVista(nuevaVista: 'estudiante' | 'admin'): void {
-    this.vistaActual = nuevaVista;
-    const rolTexto = nuevaVista === 'admin' ? 'Panel Administrador' : 'Terminal Estudiante';
-    this.notificar(`Vista cambiada a: ${rolTexto}`, 'info');
+  // Selección de Vista con Control de Acceso
+  solicitarVista(nuevaVista: 'estudiante' | 'admin'): void {
+    if (nuevaVista === 'admin') {
+      if (this.adminAutenticado) {
+        this.vistaActual = 'admin';
+        this.notificar('Bienvenido al Panel Administrador', 'exito');
+      } else {
+        this.inputPasswordAdmin = '';
+        this.mostrarModalAuth = true;
+      }
+    } else {
+      this.vistaActual = 'estudiante';
+      this.notificar('Modo Terminal Estudiante', 'info');
+    }
+  }
+
+  validarPasswordAdmin(): void {
+    if (this.inputPasswordAdmin.trim() === this.passCorrectoAdmin) {
+      this.adminAutenticado = true;
+      this.vistaActual = 'admin';
+      this.mostrarModalAuth = false;
+      this.inputPasswordAdmin = '';
+      this.notificar('Acceso concedido al Administrador', 'exito');
+    } else {
+      this.notificar('Contraseña incorrecta. Intenta de nuevo.', 'alerta');
+    }
+  }
+
+  cerrarModalAuth(): void {
+    this.mostrarModalAuth = false;
+    this.inputPasswordAdmin = '';
+  }
+
+  cerrarSesionAdmin(): void {
+    this.adminAutenticado = false;
+    this.vistaActual = 'estudiante';
+    this.notificar('Sesión de administración cerrada', 'info');
   }
 
   iniciarReloj(): void {
@@ -163,7 +203,7 @@ export class App implements OnInit, OnDestroy {
       fecha: ahora.toLocaleDateString('es-ES'),
       horaEntrada: ahora.toLocaleTimeString('es-ES'),
       estado: 'En Turno',
-      observacion: this.observacionActual.trim() || 'Acomodo y clasificación de documentos'
+      observacion: this.observacionActual.trim() || 'Actividad de Servicio Social'
     };
 
     this.registroService.agregarRegistro(nuevo).then(() => {
@@ -230,7 +270,7 @@ export class App implements OnInit, OnDestroy {
   eliminarRegistro(id?: string): void {
     if (!id) return;
     this.registroService.eliminarRegistro(id).then(() => {
-      this.notificar('Registro eliminado de Firebase', 'info');
+      this.notificar('Registro eliminado de Cloud Firestore', 'info');
     }).catch((err: any) => console.error(err));
   }
 
@@ -255,7 +295,7 @@ export class App implements OnInit, OnDestroy {
     this.empleadoSeleccionadoId = emp.id;
     this.alCambiarEmpleado();
     this.cerrarModalEmpleado();
-    this.notificar(`Estudiante ${emp.nombre} agregado con éxito`, 'exito');
+    this.notificar(`Estudiante ${emp.nombre} registrado correctamente`, 'exito');
     this.nuevoEmpleado = { nombre: '', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 };
   }
 
@@ -277,6 +317,6 @@ export class App implements OnInit, OnDestroy {
     a.download = `Reporte_Asistencia_UTNG_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    this.notificar('Reporte CSV generado correctamente', 'exito');
+    this.notificar('Reporte CSV descargado con éxito', 'exito');
   }
 }
