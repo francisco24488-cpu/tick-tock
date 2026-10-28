@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RegistroService, Empresa, Empleado, Registro } from './services/registro';
+import { RegistroService, Empresa, Usuario, Registro } from './services/registro';
 
 @Component({
   selector: 'app-root',
@@ -11,37 +11,37 @@ import { RegistroService, Empresa, Empleado, Registro } from './services/registr
   styleUrl: './app.css'
 })
 export class App implements OnInit, OnDestroy {
-  // Control de Vista / Rol ('estudiante' | 'admin')
-  vistaActual: 'estudiante' | 'admin' = 'estudiante';
+  // Control de Pantallas
+  pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' = 'bienvenida';
+  tabAuth: 'login' | 'registro' = 'login';
 
-  // Seguridad y Autenticación del Administrador
-  adminAutenticado: boolean = false;
-  mostrarModalAuth: boolean = false;
-  inputPasswordAdmin: string = '';
-  readonly passCorrectoAdmin: string = 'utng2026'; // Contraseña por defecto
+  // Sesión de Usuario
+  usuarioActual: Usuario | null = null;
+  sesionIniciada: boolean = false;
+
+  // Formulario de Autenticación
+  formCorreo: string = '';
+  formPassword: string = '';
+  formNombre: string = '';
+  formRol: 'estudiante' | 'admin' = 'estudiante';
+  formDepartamento: string = 'Edificio D';
+  formAvatar: string = '👨‍🎓';
 
   empresa: Empresa = { 
     nombre: 'Mastache Servicio', 
-    sucursal: 'Edificio D - UTNG', 
+    sucursal: 'UTNG (Edificio D)', 
     codigo: 'UTNG-2026', 
     horario: '02:00 PM - 07:00 PM' 
   };
 
-  empleados: Empleado[] = [
-    { id: '1', nombre: 'Francisco Javier González García', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 },
-    { id: '2', nombre: 'Ángel Uriel Sánchez Lara', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 },
-    { id: '3', nombre: 'Nataly Ramírez Godoy', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👩‍🎓', tarifaHora: 0 },
-    { id: '4', nombre: 'Sofía Valentina Mendoza Castro', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👩‍🎓', tarifaHora: 0 },
-    { id: '5', nombre: 'Carlos Eduardo López Hernández', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 }
-  ];
-
+  usuariosSistema: Usuario[] = [];
   registros: Registro[] = [];
 
-  empleadoSeleccionadoId: string | number = '1';
-  empleadoSeleccionado: Empleado | null = null;
+  // Marcaje de Estudiante
   observacionActual: string = '';
+  cargandoAccion: boolean = false;
 
-  // Filtros
+  // Filtros Administrador
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
 
@@ -56,19 +56,10 @@ export class App implements OnInit, OnDestroy {
   mensajeToast: string = '';
   tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
 
-  // Modales Administrador
-  mostrarModalEmpleado: boolean = false;
+  // Modales
   mostrarModalEmpresa: boolean = false;
 
-  nuevoEmpleado = {
-    nombre: '',
-    puesto: 'Estudiante',
-    departamento: 'Edificio D',
-    avatar: '👨‍🎓',
-    tarifaHora: 0
-  };
-
-  avatares = ['👨‍🎓', '👩‍🎓', '🧑‍💻', '📁', '🧹', '📚', '👤'];
+  avatares = ['👨‍🎓', '👩‍🎓', '🧑‍💻', '👑', '📁', '🧹', '📚', '👤'];
   departamentos = ['Edificio D', 'Edificio A', 'Edificio B', 'Biblioteca', 'Laboratorios'];
 
   constructor(
@@ -78,109 +69,149 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.iniciarReloj();
-    this.alCambiarEmpleado();
+    this.cargarSesionGuardada();
 
-    // Carga de datos en tiempo real desde Cloud Firestore
+    // Sincronización en tiempo real desde Firestore
     this.registroService.getRegistros().subscribe({
       next: (data: Registro[]) => {
-        if (data) {
-          this.registros = data;
-        }
+        this.registros = data || [];
+        this.cdr.detectChanges();
       },
-      error: (err: any) => {
-        console.error('Error al conectar con Firestore:', err);
-        this.notificar('Error de sincronización con la base de datos', 'alerta');
-      }
+      error: (err: any) => console.error('Error registros:', err)
+    });
+
+    this.registroService.getUsuarios().subscribe({
+      next: (data: Usuario[]) => {
+        this.usuariosSistema = data || [];
+      },
+      error: (err: any) => console.error('Error usuarios:', err)
     });
   }
 
   ngOnDestroy(): void {
-    if (this.timerId) {
-      clearInterval(this.timerId);
-    }
+    if (this.timerId) clearInterval(this.timerId);
   }
 
-  // Selección de Vista con Control de Acceso
-  solicitarVista(nuevaVista: 'estudiante' | 'admin'): void {
-    if (nuevaVista === 'admin') {
-      if (this.adminAutenticado) {
-        this.vistaActual = 'admin';
-        this.notificar('Bienvenido al Panel Administrador', 'exito');
-      } else {
-        this.inputPasswordAdmin = '';
-        this.mostrarModalAuth = true;
+  // --- AUTENTICACIÓN Y SESIÓN ---
+  irAAuth(tab: 'login' | 'registro'): void {
+    this.tabAuth = tab;
+    this.pantallaActual = tab;
+  }
+
+  irABienvenida(): void {
+    this.pantallaActual = 'bienvenida';
+  }
+
+  async ejecutarRegistro(): Promise<void> {
+    if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
+      this.notificar('Por favor completa todos los campos requeridos', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    try {
+      const existe = await this.registroService.buscarUsuarioPorCorreo(this.formCorreo);
+      if (existe) {
+        this.notificar('El correo ya se encuentra registrado', 'alerta');
+        this.cargandoAccion = false;
+        return;
       }
-    } else {
-      this.vistaActual = 'estudiante';
-      this.notificar('Modo Terminal Estudiante', 'info');
-    }
-  }
 
-  validarPasswordAdmin(): void {
-    if (this.inputPasswordAdmin.trim() === this.passCorrectoAdmin) {
-      this.adminAutenticado = true;
-      this.vistaActual = 'admin';
-      this.mostrarModalAuth = false;
-      this.inputPasswordAdmin = '';
-      this.notificar('Acceso concedido al Administrador', 'exito');
-    } else {
-      this.notificar('Contraseña incorrecta. Intenta de nuevo.', 'alerta');
-    }
-  }
-
-  cerrarModalAuth(): void {
-    this.mostrarModalAuth = false;
-    this.inputPasswordAdmin = '';
-  }
-
-  cerrarSesionAdmin(): void {
-    this.adminAutenticado = false;
-    this.vistaActual = 'estudiante';
-    this.notificar('Sesión de administración cerrada', 'info');
-  }
-
-  iniciarReloj(): void {
-    const actualizar = () => {
-      const ahora = new Date();
-      const opcionesFecha: Intl.DateTimeFormatOptions = { 
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'long', 
-        year: 'numeric' 
+      const nuevoUsuario: Usuario = {
+        nombre: this.formNombre.trim(),
+        correo: this.formCorreo.trim().toLowerCase(),
+        password: this.formPassword.trim(),
+        rol: this.formRol,
+        departamento: this.formDepartamento,
+        avatar: this.formAvatar,
+        puesto: this.formRol === 'admin' ? 'Administrador' : 'Estudiante'
       };
-      this.relojFecha = ahora.toLocaleDateString('es-ES', opcionesFecha);
 
-      let horas = ahora.getHours();
-      const mins = ahora.getMinutes().toString().padStart(2, '0');
-      const segs = ahora.getSeconds().toString().padStart(2, '0');
-      
-      this.relojAmPm = horas >= 12 ? 'PM' : 'AM';
-      horas = horas % 12 || 12;
-      this.relojHora = `${horas.toString().padStart(2, '0')}:${mins}:${segs}`;
-      
-      this.cdr.detectChanges();
-    };
+      const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
+      nuevoUsuario.id = docRef.id;
 
-    actualizar();
-    this.timerId = setInterval(actualizar, 1000);
+      this.iniciarSesionUsuario(nuevoUsuario);
+      this.notificar(`¡Cuenta creada con éxito! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
+      this.limpiarFormularioAuth();
+    } catch (error) {
+      console.error(error);
+      this.notificar('Error al guardar el usuario en Firebase', 'alerta');
+    } finally {
+      this.cargandoAccion = false;
+    }
   }
 
-  notificar(mensaje: string, tipo: 'exito' | 'alerta' | 'info' = 'exito'): void {
-    this.mensajeToast = mensaje;
-    this.tipoToast = tipo;
-    this.mostrarToast = true;
-    setTimeout(() => {
-      this.mostrarToast = false;
-    }, 3000);
+  async ejecutarLogin(): Promise<void> {
+    if (!this.formCorreo.trim() || !this.formPassword.trim()) {
+      this.notificar('Ingresa tu correo y contraseña', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    try {
+      const usuario = await this.registroService.buscarUsuarioPorCorreo(this.formCorreo);
+      if (!usuario || usuario.password !== this.formPassword.trim()) {
+        this.notificar('Correo o contraseña incorrectos', 'alerta');
+        this.cargandoAccion = false;
+        return;
+      }
+
+      this.iniciarSesionUsuario(usuario);
+      this.notificar(`Sesión iniciada como ${usuario.nombre}`, 'exito');
+      this.limpiarFormularioAuth();
+    } catch (error) {
+      console.error(error);
+      this.notificar('Error al consultar usuario en Firebase', 'alerta');
+    } finally {
+      this.cargandoAccion = false;
+    }
   }
 
-  alCambiarEmpleado(): void {
-    this.empleadoSeleccionado = this.empleados.find(e => String(e.id) === String(this.empleadoSeleccionadoId)) || null;
+  iniciarSesionUsuario(usuario: Usuario): void {
+    this.usuarioActual = usuario;
+    this.sesionIniciada = true;
+    this.pantallaActual = 'dashboard';
+    localStorage.setItem('utng_user', JSON.stringify(usuario));
   }
 
+  cerrarSesion(): void {
+    this.usuarioActual = null;
+    this.sesionIniciada = false;
+    this.pantallaActual = 'bienvenida';
+    localStorage.removeItem('utng_user');
+    this.notificar('Has cerrado sesión correctamente', 'info');
+  }
+
+  cargarSesionGuardada(): void {
+    const raw = localStorage.getItem('utng_user');
+    if (raw) {
+      try {
+        const user = JSON.parse(raw);
+        if (user && user.nombre) {
+          this.usuarioActual = user;
+          this.sesionIniciada = true;
+          this.pantallaActual = 'dashboard';
+        }
+      } catch (e) {
+        localStorage.removeItem('utng_user');
+      }
+    }
+  }
+
+  limpiarFormularioAuth(): void {
+    this.formNombre = '';
+    this.formCorreo = '';
+    this.formPassword = '';
+  }
+
+  // --- LÓGICA DE FICHAJE ---
   get registroActivo(): Registro | undefined {
-    if (!this.empleadoSeleccionado) return undefined;
-    return this.registros.find(r => String(r.empleadoId) === String(this.empleadoSeleccionado?.id) && (r.estado === 'En Turno' || r.estado === 'En Pausa'));
+    if (!this.usuarioActual) return undefined;
+    const userId = String(this.usuarioActual.id || this.usuarioActual.correo);
+    return this.registros.find(r => 
+      (String(r.empleadoId) === userId || r.empleadoNombre === this.usuarioActual?.nombre) && 
+      (r.estado === 'En Turno' || r.estado === 'En Pausa')
+    );
   }
 
   get estaEnTurno(): boolean {
@@ -192,26 +223,29 @@ export class App implements OnInit, OnDestroy {
   }
 
   marcarEntrada(): void {
-    if (!this.empleadoSeleccionado) return;
+    if (!this.usuarioActual) return;
 
+    this.cargandoAccion = true;
     const ahora = new Date();
     const nuevo: Registro = {
-      empleadoId: this.empleadoSeleccionado.id,
-      empleadoNombre: this.empleadoSeleccionado.nombre,
-      puesto: this.empleadoSeleccionado.puesto,
-      departamento: this.empleadoSeleccionado.departamento,
+      empleadoId: String(this.usuarioActual.id || this.usuarioActual.correo),
+      empleadoNombre: this.usuarioActual.nombre,
+      puesto: this.usuarioActual.puesto || 'Estudiante',
+      departamento: this.usuarioActual.departamento || 'Edificio D',
       fecha: ahora.toLocaleDateString('es-ES'),
       horaEntrada: ahora.toLocaleTimeString('es-ES'),
       estado: 'En Turno',
-      observacion: this.observacionActual.trim() || 'Actividad de Servicio Social'
+      observacion: this.observacionActual.trim() || 'Servicio Social UTNG'
     };
 
     this.registroService.agregarRegistro(nuevo).then(() => {
-      this.notificar(`Entrada registrada para ${this.empleadoSeleccionado?.nombre}`, 'exito');
+      this.notificar(`Entrada registrada a las ${nuevo.horaEntrada}`, 'exito');
       this.observacionActual = '';
-    }).catch((err: any) => {
-      console.error(err);
-      this.notificar('Error al guardar en Firebase', 'alerta');
+    }).catch(err => {
+      console.error('Error Entrada:', err);
+      this.notificar('Error al guardar marcaje en Firebase', 'alerta');
+    }).finally(() => {
+      this.cargandoAccion = false;
     });
   }
 
@@ -219,6 +253,7 @@ export class App implements OnInit, OnDestroy {
     const reg = this.registroActivo;
     if (!reg || !reg.id) return;
 
+    this.cargandoAccion = true;
     const horaActual = new Date().toLocaleTimeString('es-ES');
     const esTurno = reg.estado === 'En Turno';
     const datosActualizar: Partial<Registro> = {
@@ -227,14 +262,17 @@ export class App implements OnInit, OnDestroy {
     };
 
     this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
-      this.notificar(`Estado actualizado para ${reg.empleadoNombre}`, 'info');
-    }).catch((err: any) => console.error(err));
+      this.notificar(esTurno ? 'Pausa iniciada' : 'Turno reanudado', 'info');
+    }).catch(err => console.error(err)).finally(() => {
+      this.cargandoAccion = false;
+    });
   }
 
   marcarSalida(): void {
     const reg = this.registroActivo;
     if (!reg || !reg.id) return;
 
+    this.cargandoAccion = true;
     const ahora = new Date();
     const datosActualizar: Partial<Registro> = {
       horaSalida: ahora.toLocaleTimeString('es-ES'),
@@ -243,10 +281,13 @@ export class App implements OnInit, OnDestroy {
     };
 
     this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
-      this.notificar(`Salida registrada para ${reg.empleadoNombre}`, 'alerta');
-    }).catch((err: any) => console.error(err));
+      this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'alerta');
+    }).catch(err => console.error(err)).finally(() => {
+      this.cargandoAccion = false;
+    });
   }
 
+  // --- FILTROS Y REPORTES ---
   get registrosFiltrados(): Registro[] {
     return this.registros.filter(r => {
       const coincideBusqueda = r.empleadoNombre.toLowerCase().includes(this.busquedaEmpleado.toLowerCase()) ||
@@ -258,11 +299,12 @@ export class App implements OnInit, OnDestroy {
   }
 
   get misRegistrosEstudiante(): Registro[] {
-    if (!this.empleadoSeleccionado) return [];
-    return this.registros.filter(r => String(r.empleadoId) === String(this.empleadoSeleccionado?.id));
+    if (!this.usuarioActual) return [];
+    const userId = String(this.usuarioActual.id || this.usuarioActual.correo);
+    return this.registros.filter(r => String(r.empleadoId) === userId || r.empleadoNombre === this.usuarioActual?.nombre);
   }
 
-  get totalEmpleados(): number { return this.empleados.length; }
+  get totalEstudiantes(): number { return this.usuariosSistema.filter(u => u.rol === 'estudiante').length; }
   get personalEnTurno(): number { return this.registros.filter(r => r.estado === 'En Turno').length; }
   get personalEnPausa(): number { return this.registros.filter(r => r.estado === 'En Pausa').length; }
   get totalCompletados(): number { return this.registros.filter(r => r.estado === 'Completado').length; }
@@ -270,33 +312,8 @@ export class App implements OnInit, OnDestroy {
   eliminarRegistro(id?: string): void {
     if (!id) return;
     this.registroService.eliminarRegistro(id).then(() => {
-      this.notificar('Registro eliminado de Cloud Firestore', 'info');
-    }).catch((err: any) => console.error(err));
-  }
-
-  abrirModalEmpleado(): void { this.mostrarModalEmpleado = true; }
-  cerrarModalEmpleado(): void { this.mostrarModalEmpleado = false; }
-  abrirModalEmpresa(): void { this.mostrarModalEmpresa = true; }
-  cerrarModalEmpresa(): void { this.mostrarModalEmpresa = false; }
-
-  guardarNuevoEmpleado(): void {
-    if (!this.nuevoEmpleado.nombre) return;
-
-    const emp: Empleado = {
-      id: Date.now().toString(),
-      nombre: this.nuevoEmpleado.nombre,
-      puesto: this.nuevoEmpleado.puesto,
-      departamento: this.nuevoEmpleado.departamento,
-      avatar: this.nuevoEmpleado.avatar,
-      tarifaHora: 0
-    };
-
-    this.empleados.push(emp);
-    this.empleadoSeleccionadoId = emp.id;
-    this.alCambiarEmpleado();
-    this.cerrarModalEmpleado();
-    this.notificar(`Estudiante ${emp.nombre} registrado correctamente`, 'exito');
-    this.nuevoEmpleado = { nombre: '', puesto: 'Estudiante', departamento: 'Edificio D', avatar: '👨‍🎓', tarifaHora: 0 };
+      this.notificar('Registro eliminado de Firebase', 'info');
+    });
   }
 
   exportarCSV(): void {
@@ -304,19 +321,43 @@ export class App implements OnInit, OnDestroy {
       this.notificar('No hay datos para exportar', 'alerta');
       return;
     }
-
-    let csv = "ID,Estudiante,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Realizada\n";
+    let csv = "ID,Estudiante,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad\n";
     this.registros.forEach(r => {
       csv += `"${r.id || ''}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}"\n`;
     });
-
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Reporte_Asistencia_UTNG_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
+    a.download = `Reporte_UTNG_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    this.notificar('Reporte CSV descargado con éxito', 'exito');
+    this.notificar('CSV generado con éxito', 'exito');
   }
+
+  iniciarReloj(): void {
+    const actualizar = () => {
+      const ahora = new Date();
+      this.relojFecha = ahora.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      let horas = ahora.getHours();
+      const mins = ahora.getMinutes().toString().padStart(2, '0');
+      const segs = ahora.getSeconds().toString().padStart(2, '0');
+      this.relojAmPm = horas >= 12 ? 'PM' : 'AM';
+      horas = horas % 12 || 12;
+      this.relojHora = `${horas.toString().padStart(2, '0')}:${mins}:${segs}`;
+      this.cdr.detectChanges();
+    };
+    actualizar();
+    this.timerId = setInterval(actualizar, 1000);
+  }
+
+  notificar(mensaje: string, tipo: 'exito' | 'alerta' | 'info' = 'exito'): void {
+    this.mensajeToast = mensaje;
+    this.tipoToast = tipo;
+    this.mostrarToast = true;
+    setTimeout(() => { this.mostrarToast = false; }, 3200);
+  }
+
+  abrirModalEmpresa(): void { this.mostrarModalEmpresa = true; }
+  cerrarModalEmpresa(): void { this.mostrarModalEmpresa = false; }
 }

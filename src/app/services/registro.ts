@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { Firestore, collection, collectionData, addDoc, updateDoc, deleteDoc, doc } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
 export interface Empresa {
@@ -9,18 +9,20 @@ export interface Empresa {
   horario: string;
 }
 
-export interface Empleado {
-  id: string | number;
+export interface Usuario {
+  id?: string;
   nombre: string;
-  puesto: string;
+  correo: string;
+  password?: string;
+  rol: 'estudiante' | 'admin';
   departamento: string;
   avatar: string;
-  tarifaHora?: number;
+  puesto: string;
 }
 
 export interface Registro {
   id?: string;
-  empleadoId: string | number;
+  empleadoId: string;
   empleadoNombre: string;
   puesto: string;
   departamento: string;
@@ -40,6 +42,7 @@ export interface Registro {
 export class RegistroService {
   constructor(private firestore: Firestore) {}
 
+  // --- REGISTROS DE ASISTENCIA ---
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
@@ -58,5 +61,28 @@ export class RegistroService {
   eliminarRegistro(id: string) {
     const registroDoc = doc(this.firestore, `registros/${id}`);
     return deleteDoc(registroDoc);
+  }
+
+  // --- USUARIOS Y AUTENTICACIÓN ---
+  async registrarUsuario(usuario: Usuario): Promise<any> {
+    const usuariosRef = collection(this.firestore, 'usuarios');
+    return addDoc(usuariosRef, usuario);
+  }
+
+  async buscarUsuarioPorCorreo(correo: string): Promise<Usuario | null> {
+    const usuariosRef = collection(this.firestore, 'usuarios');
+    const q = query(usuariosRef, where('correo', '==', correo.trim().toLowerCase()));
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const docSnap = querySnapshot.docs[0];
+      return { id: docSnap.id, ...docSnap.data() } as Usuario;
+    }
+    return null;
+  }
+
+  getUsuarios(): Observable<Usuario[]> {
+    const usuariosRef = collection(this.firestore, 'usuarios');
+    return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
   }
 }
