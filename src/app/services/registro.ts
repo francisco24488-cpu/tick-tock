@@ -14,7 +14,7 @@ export interface Usuario {
   nombre: string;
   correo: string;
   password?: string;
-  rol: 'estudiante' | 'admin';
+  rol: 'estudiante' | 'admin'; // 'estudiante' actua como usuario/colaborador general
   departamento: string;
   avatar: string;
   puesto: string;
@@ -42,7 +42,7 @@ export interface Registro {
 export class RegistroService {
   constructor(private firestore: Firestore) {}
 
-  // --- REGISTROS DE ASISTENCIA ---
+  // --- REGISTROS DE TIEMPO Y ASISTENCIA ---
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
@@ -63,7 +63,7 @@ export class RegistroService {
     return deleteDoc(registroDoc);
   }
 
-  // --- USUARIOS Y AUTENTICACIÓN ---
+  // --- AUTENTICACIÓN Y GESTIÓN DE USUARIOS ---
   async registrarUsuario(usuario: Usuario): Promise<any> {
     const usuariosRef = collection(this.firestore, 'usuarios');
     return addDoc(usuariosRef, usuario);
