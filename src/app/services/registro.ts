@@ -33,17 +33,8 @@ export interface Registro {
   horaPausaFin?: string;
   totalHoras?: string;
   estado: 'En Turno' | 'En Pausa' | 'Completado';
-  observacion?: string;
-}
-
-// Función auxiliar para limitar el tiempo de espera a 5 segundos
-function conTimeout<T>(promesa: Promise<T>, ms: number = 5000): Promise<T> {
-  return Promise.race([
-    promesa,
-    new Promise<T>((_, reject) => 
-      setTimeout(() => reject(new Error('Tiempo de espera agotado al conectar con Firestore')), ms)
-    )
-  ]);
+  observacion: string;
+  reporteFinal?: string;
 }
 
 @Injectable({
@@ -52,7 +43,7 @@ function conTimeout<T>(promesa: Promise<T>, ms: number = 5000): Promise<T> {
 export class RegistroService {
   constructor(private firestore: Firestore) {}
 
-  // --- REGISTROS DE ASISTENCIA ---
+  // --- COLECCIÓN FIRESTORE: 'registros' ---
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
@@ -60,39 +51,40 @@ export class RegistroService {
 
   agregarRegistro(registro: Registro) {
     const registrosRef = collection(this.firestore, 'registros');
-    return conTimeout(addDoc(registrosRef, registro));
+    return addDoc(registrosRef, registro);
   }
 
   actualizarRegistro(id: string, data: Partial<Registro>) {
     const registroDoc = doc(this.firestore, `registros/${id}`);
-    return conTimeout(updateDoc(registroDoc, data));
+    return updateDoc(registroDoc, data);
   }
 
   eliminarRegistro(id: string) {
     const registroDoc = doc(this.firestore, `registros/${id}`);
-    return conTimeout(deleteDoc(registroDoc));
+    return deleteDoc(registroDoc);
   }
 
-  // --- USUARIOS Y AUTENTICACIÓN ---
+  // --- COLECCIÓN FIRESTORE: 'usuarios' ---
   async registrarUsuario(usuario: Usuario): Promise<any> {
     const usuariosRef = collection(this.firestore, 'usuarios');
-    return conTimeout(addDoc(usuariosRef, usuario));
+    return addDoc(usuariosRef, usuario);
   }
 
   async buscarUsuarioPorCorreo(correo: string): Promise<Usuario | null> {
     try {
       const usuariosRef = collection(this.firestore, 'usuarios');
       const q = query(usuariosRef, where('correo', '==', correo.trim().toLowerCase()));
-      const querySnapshot = await conTimeout(getDocs(q));
+      const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
         const docSnap = querySnapshot.docs[0];
-        return { id: docSnap.id, ...docSnap.data() } as Usuario;
+        const data = docSnap.data() as Usuario;
+        return { ...data, id: docSnap.id };
       }
       return null;
     } catch (e) {
-      console.error('Error al consultar usuario en Firestore:', e);
-      throw e;
+      console.error('Error buscando usuario en Firestore:', e);
+      return null;
     }
   }
 

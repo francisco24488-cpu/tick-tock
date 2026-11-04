@@ -5,9 +5,29 @@
     <span>{{ mensajeToast }}</span>
   </div>
 
-  <!-- ======================================================== -->
-  <!-- 1. PANTALLA DE BIENVENIDA (PÁGINA PRINCIPAL UNIVERSAL)  -->
-  <!-- ======================================================== -->
+  <!-- Modal Reporte Final de Salida -->
+  <div class="modal-overlay" *ngIf="mostrarModalSalida">
+    <div class="modal-card">
+      <h3 class="modal-title">📝 Reporte Final de Jornada</h3>
+      <p class="modal-sub">Escribe un breve resumen de los logros o actividades concluidas en tu turno:</p>
+      
+      <textarea 
+        class="textarea-emerald" 
+        rows="4" 
+        [(ngModel)]="reporteFinalTexto" 
+        placeholder="Ej: Se completó la revisión de reportes y atención a 5 usuarios...">
+      </textarea>
+
+      <div class="modal-actions">
+        <button class="btn-cancel-modal" (click)="cerrarModalSalida()" [disabled]="cargandoAccion">Cancelar</button>
+        <button class="btn-confirm-emerald" (click)="confirmarSalida()" [disabled]="cargandoAccion">
+          {{ cargandoAccion ? 'Guardando...' : '🔴 Confirmar y Finalizar Salida' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. PANTALLA DE BIENVENIDA -->
   <div class="welcome-screen" *ngIf="pantallaActual === 'bienvenida'">
     <div class="welcome-card-hero">
       <div class="hero-badge">⏱️ TickTock v2.0</div>
@@ -25,15 +45,15 @@
         <div class="feature-item">
           <span>☁️</span>
           <div>
-            <strong>Sincronización en la Nube</strong>
-            <small>Tus marcajes guardados de forma segura con Cloud Firestore</small>
+            <strong>Sincronización en Firestore</strong>
+            <small>Colecciones de 'usuarios' y 'registros' en tiempo real</small>
           </div>
         </div>
         <div class="feature-item">
           <span>📊</span>
           <div>
             <strong>Panel y Métricas de Tiempo</strong>
-            <small>Ideal para empleados, estudiantes, freelancers u organizaciones</small>
+            <small>Ideal para colaboradores, administradores u organizaciones</small>
           </div>
         </div>
       </div>
@@ -45,9 +65,7 @@
     </div>
   </div>
 
-  <!-- ======================================================== -->
-  <!-- 2. PANTALLA DE LOGIN / REGISTRO CON CONTRASEÑA           -->
-  <!-- ======================================================== -->
+  <!-- 2. PANTALLA DE LOGIN / REGISTRO -->
   <div class="auth-screen" *ngIf="pantallaActual === 'login' || pantallaActual === 'registro'">
     <div class="auth-card">
       <button class="btn-back-link" (click)="irABienvenida()">← Volver a TickTock</button>
@@ -95,8 +113,8 @@
           <div class="form-group flex-1">
             <label>Tipo de Usuario:</label>
             <select class="select-emerald" [(ngModel)]="formRol" name="rol">
-              <option value="estudiante">👤 Usuario / Colaborador</option>
-              <option value="admin">👑 Administrador / Manager</option>
+              <option value="estudiante">👤 Colaborador / Usuario</option>
+              <option value="admin">👑 Administrador</option>
             </select>
           </div>
 
@@ -129,11 +147,8 @@
     </div>
   </div>
 
-  <!-- ======================================================== -->
-  <!-- 3. DASHBOARD Y PANEL DE FICHAJE DE HORAS                 -->
-  <!-- ======================================================== -->
+  <!-- 3. DASHBOARD -->
   <ng-container *ngIf="pantallaActual === 'dashboard' && usuarioActual">
-    <!-- Header Principal -->
     <header class="welcome-hero">
       <div class="hero-brand">
         <div class="utng-logo-chip">⏱️ TickTock</div>
@@ -156,7 +171,6 @@
       </div>
     </header>
 
-    <!-- Sub-Bar con Reloj Digital -->
     <div class="sub-bar">
       <div class="info-chips">
         <span class="chip">📍 Área: <strong>{{ usuarioActual.departamento }}</strong></span>
@@ -171,21 +185,38 @@
     </div>
 
     <main class="main-content">
-      <!-- VISTA USUARIO STANDARD (CONTEO DE HORAS) -->
+      <!-- VISTA COLABORADOR / USUARIO -->
       <section class="card kiosk-card" *ngIf="usuarioActual.rol === 'estudiante'">
         <div class="card-header-emerald">
           <h2>⏱️ Panel de Registro de Horas</h2>
-          <p>Escribe tu actividad actual y utiliza los botones para marcar el inicio o fin de tu tiempo</p>
+          <p>Escribe tu actividad obligatoria para iniciar turno y actualízala cuando lo requieras</p>
         </div>
 
+        <!-- Formulario de Actividad -->
         <div class="form-group margin-b">
-          <label><strong>Actividad / Tarea del Día:</strong></label>
-          <input 
-            type="text" 
-            class="input-emerald" 
-            [(ngModel)]="observacionActual" 
-            placeholder="Ej: Desarrollo de proyecto, atención a clientes, reunión de equipo..." 
-            [disabled]="estaEnTurno || estaEnPausa">
+          <label><strong>Actividad / Objetivo del Día <span class="req-star">*</span>:</strong></label>
+          <div class="activity-input-row">
+            <input 
+              type="text" 
+              class="input-emerald flex-1" 
+              [(ngModel)]="observacionActual" 
+              placeholder="Ej: Desarrollo de módulos, atención a clientes, pruebas de software...">
+            
+            <button 
+              type="button" 
+              class="btn-update-act" 
+              *ngIf="estaEnTurno || estaEnPausa" 
+              (click)="actualizarActividad()" 
+              [disabled]="cargandoAccion">
+              🔄 Actualizar Actividad
+            </button>
+          </div>
+          <small class="info-note" *ngIf="!estaEnTurno && !estaEnPausa">
+            * Campo obligatorio para poder presionar "Marcar Entrada".
+          </small>
+          <small class="info-note" *ngIf="estaEnTurno || estaEnPausa">
+            * Escribe una nueva actividad y presiona "Actualizar Actividad" para modificar tu registro en tiempo real.
+          </small>
         </div>
 
         <!-- Indicador de Estado -->
@@ -214,7 +245,7 @@
             <span class="kiosk-icon">🟢</span>
             <div>
               <strong>MARCAR ENTRADA</strong>
-              <small>Iniciar Conteo de Tiempo</small>
+              <small>Iniciar Conteo con Actividad</small>
             </div>
           </button>
 
@@ -233,17 +264,17 @@
           <button 
             type="button"
             class="btn-kiosk btn-red" 
-            (click)="marcarSalida()" 
+            (click)="abrirModalSalida()" 
             [disabled]="(!estaEnTurno && !estaEnPausa) || cargandoAccion">
             <span class="kiosk-icon">🔴</span>
             <div>
               <strong>MARCAR SALIDA</strong>
-              <small>Concluir Jornada</small>
+              <small>Concluir con Reporte Final</small>
             </div>
           </button>
         </div>
 
-        <!-- Tabla Personal de Horas -->
+        <!-- Tabla Personal -->
         <div class="margin-top-2">
           <h3>📋 Mis Registros de Tiempo de Hoy</h3>
           <table class="emerald-table margin-top">
@@ -255,6 +286,7 @@
                 <th>Salida</th>
                 <th>Estado</th>
                 <th>Actividad</th>
+                <th>Reporte Final</th>
               </tr>
             </thead>
             <tbody>
@@ -265,16 +297,17 @@
                 <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
                 <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
                 <td>{{ reg.observacion }}</td>
+                <td><em>{{ reg.reporteFinal || 'En curso...' }}</em></td>
               </tr>
               <tr *ngIf="misRegistrosEstudiante.length === 0">
-                <td colspan="6" class="empty-row">Aún no tienes horas registradas hoy. ¡Presiona Marcar Entrada!</td>
+                <td colspan="7" class="empty-row">Aún no tienes registros hoy. ¡Ingresa tu actividad y presiona Marcar Entrada!</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
 
-      <!-- VISTA ADMINISTRADOR (MONITOR GENERAL) -->
+      <!-- VISTA ADMINISTRADOR -->
       <section class="card" *ngIf="usuarioActual.rol === 'admin'">
         <div class="kpi-grid">
           <div class="kpi-box">
@@ -296,9 +329,9 @@
         </div>
 
         <div class="table-header-bar margin-top-2">
-          <h3>📊 Bitácora General de Conteo de Horas</h3>
+          <h3>📊 Bitácora General (Firestore)</h3>
           <div class="admin-toolbar">
-            <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar por nombre o actividad...">
+            <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar por usuario, área o actividad...">
             <select class="select-emerald" [(ngModel)]="filtroEstado">
               <option value="TODOS">Todos los estados</option>
               <option value="En Turno">🟢 En Actividad</option>
@@ -321,6 +354,7 @@
                 <th>Salida</th>
                 <th>Estado</th>
                 <th>Actividad</th>
+                <th>Reporte Final</th>
                 <th>Acción</th>
               </tr>
             </thead>
@@ -334,10 +368,11 @@
                 <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
                 <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
                 <td>{{ reg.observacion }}</td>
+                <td><em>{{ reg.reporteFinal || '--' }}</em></td>
                 <td><button class="btn-delete-row" (click)="eliminarRegistro(reg.id)">🗑️</button></td>
               </tr>
               <tr *ngIf="registrosFiltrados.length === 0">
-                <td colspan="9" class="empty-row">No hay registros de tiempo coincidentes.</td>
+                <td colspan="10" class="empty-row">No hay registros de tiempo coincidentes.</td>
               </tr>
             </tbody>
           </table>

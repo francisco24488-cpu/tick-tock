@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RegistroService, Empresa, Usuario, Registro } from './services/registro';
@@ -8,7 +8,8 @@ import { RegistroService, Empresa, Usuario, Registro } from './services/registro
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './app.html',
-  styleUrl: './app.css'
+  styleUrl: './app.css',
+  encapsulation: ViewEncapsulation.None
 })
 export class App implements OnInit, OnDestroy {
   pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' = 'bienvenida';
@@ -37,6 +38,9 @@ export class App implements OnInit, OnDestroy {
   observacionActual: string = '';
   cargandoAccion: boolean = false;
 
+  mostrarModalSalida: boolean = false;
+  reporteFinalTexto: string = '';
+
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
 
@@ -48,8 +52,6 @@ export class App implements OnInit, OnDestroy {
   mostrarToast: boolean = false;
   mensajeToast: string = '';
   tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
-
-  mostrarModalEmpresa: boolean = false;
 
   avatares = ['🧑‍💻', '👨‍💼', '👩‍💼', '👑', '📁', '⚙️', '📊', '👤'];
   departamentos = ['General', 'Administración', 'Desarrollo & TI', 'Operaciones', 'Ventas & Marketing'];
@@ -68,7 +70,7 @@ export class App implements OnInit, OnDestroy {
         this.registros = data || [];
         this.cdr.detectChanges();
       },
-      error: (err: any) => console.error('Error registros:', err)
+      error: (err: any) => console.error('Error sincronizando registros:', err)
     });
 
     this.registroService.getUsuarios().subscribe({
@@ -76,7 +78,7 @@ export class App implements OnInit, OnDestroy {
         this.usuariosSistema = data || [];
         this.cdr.detectChanges();
       },
-      error: (err: any) => console.error('Error usuarios:', err)
+      error: (err: any) => console.error('Error sincronizando usuarios:', err)
     });
   }
 
@@ -102,39 +104,35 @@ export class App implements OnInit, OnDestroy {
     this.cargandoAccion = true;
     this.cdr.detectChanges();
 
-    const nuevoUsuario: Usuario = {
-      nombre: this.formNombre.trim(),
-      correo: this.formCorreo.trim().toLowerCase(),
-      password: this.formPassword.trim(),
-      rol: this.formRol,
-      departamento: this.formDepartamento,
-      avatar: this.formAvatar,
-      puesto: this.formRol === 'admin' ? 'Administrador' : 'Colaborador'
-    };
-
     try {
-      const existe = await this.registroService.buscarUsuarioPorCorreo(this.formCorreo);
+      const correoNormalizado = this.formCorreo.trim().toLowerCase();
+      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNormalizado);
       if (existe) {
-        this.notificar('Este correo ya está registrado en TickTock', 'alerta');
+        this.notificar('Este correo ya está registrado en la base de datos', 'alerta');
         this.cargandoAccion = false;
         this.cdr.detectChanges();
         return;
       }
 
+      const nuevoUsuario: Usuario = {
+        nombre: this.formNombre.trim(),
+        correo: correoNormalizado,
+        password: this.formPassword.trim(),
+        rol: this.formRol,
+        departamento: this.formDepartamento,
+        avatar: this.formAvatar,
+        puesto: this.formRol === 'admin' ? 'Administrador' : 'Colaborador'
+      };
+
       const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
       nuevoUsuario.id = docRef.id;
 
       this.iniciarSesionUsuario(nuevoUsuario);
-      this.notificar(`¡Cuenta creada con éxito! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
+      this.notificar(`¡Cuenta registrada! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
       this.limpiarFormularioAuth();
-    } catch (error: any) {
-      console.warn('Almacenamiento temporal activado por retardo de red:', error);
-      
-      // Respaldo de acceso inmediato
-      nuevoUsuario.id = 'usr_' + Date.now();
-      this.iniciarSesionUsuario(nuevoUsuario);
-      this.notificar(`¡Bienvenido a TickTock, ${nuevoUsuario.nombre}!`, 'exito');
-      this.limpiarFormularioAuth();
+    } catch (error) {
+      console.error(error);
+      this.notificar('Error de conexión con Firestore', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -154,29 +152,21 @@ export class App implements OnInit, OnDestroy {
     const passBuscada = this.formPassword.trim();
 
     try {
-      const usuario = await this.registroService.buscarUsuarioPorCorreo(correoBuscado);
+      let usuario = await this.registroService.buscarUsuarioPorCorreo(correoBuscado);
+      if (!usuario) {
+        usuario = this.usuariosSistema.find(u => u.correo.toLowerCase() === correoBuscado) || null;
+      }
+
       if (usuario && usuario.password === passBuscada) {
         this.iniciarSesionUsuario(usuario);
-        this.notificar(`Bienvenido de nuevo, ${usuario.nombre}`, 'exito');
+        this.notificar(`Sesión iniciada como ${usuario.rol === 'admin' ? '👑 Administrador' : '👤 Colaborador'}`, 'exito');
         this.limpiarFormularioAuth();
       } else {
         this.notificar('Correo o contraseña incorrectos', 'alerta');
       }
-    } catch (error: any) {
-      console.warn('Conectando en modo directo:', error);
-      const usuarioLocal = {
-        id: 'usr_' + Date.now(),
-        nombre: correoBuscado.split('@')[0],
-        correo: correoBuscado,
-        password: passBuscada,
-        rol: 'estudiante' as const,
-        departamento: 'General',
-        avatar: '🧑‍💻',
-        puesto: 'Colaborador'
-      };
-      this.iniciarSesionUsuario(usuarioLocal);
-      this.notificar(`Sesión iniciada como ${usuarioLocal.nombre}`, 'exito');
-      this.limpiarFormularioAuth();
+    } catch (error) {
+      console.error('Error durante login:', error);
+      this.notificar('Error al verificar credenciales', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -184,10 +174,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   iniciarSesionUsuario(usuario: Usuario): void {
-    this.usuarioActual = usuario;
+    this.usuarioActual = { ...usuario };
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
-    localStorage.setItem('ticktock_user', JSON.stringify(usuario));
+    localStorage.setItem('ticktock_user', JSON.stringify(this.usuarioActual));
   }
 
   cerrarSesion(): void {
@@ -203,7 +193,7 @@ export class App implements OnInit, OnDestroy {
     if (raw) {
       try {
         const user = JSON.parse(raw);
-        if (user && user.nombre) {
+        if (user && user.nombre && user.rol) {
           this.usuarioActual = user;
           this.sesionIniciada = true;
           this.pantallaActual = 'dashboard';
@@ -240,6 +230,11 @@ export class App implements OnInit, OnDestroy {
   marcarEntrada(): void {
     if (!this.usuarioActual) return;
 
+    if (!this.observacionActual.trim()) {
+      this.notificar('⚠️ La actividad u objetivo inicial es OBLIGATORIA para iniciar turno', 'alerta');
+      return;
+    }
+
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const ahora = new Date();
@@ -252,17 +247,42 @@ export class App implements OnInit, OnDestroy {
       fecha: ahora.toLocaleDateString('es-ES'),
       horaEntrada: ahora.toLocaleTimeString('es-ES'),
       estado: 'En Turno',
-      observacion: this.observacionActual.trim() || 'Actividad Laboral'
+      observacion: this.observacionActual.trim()
     };
 
     this.registroService.agregarRegistro(nuevo).then(() => {
-      this.notificar(`Entrada marcada a las ${nuevo.horaEntrada}`, 'exito');
+      this.notificar(`Entrada guardada a las ${nuevo.horaEntrada}`, 'exito');
       this.observacionActual = '';
     }).catch(err => {
-      console.warn('Registro local efectuado:', err);
-      this.registros.unshift(nuevo);
-      this.notificar(`Entrada registrada a las ${nuevo.horaEntrada}`, 'exito');
+      console.error(err);
+      this.notificar('Error al guardar marcaje', 'alerta');
+    }).finally(() => {
+      this.cargandoAccion = false;
+      this.cdr.detectChanges();
+    });
+  }
+
+  actualizarActividad(): void {
+    const reg = this.registroActivo;
+    if (!reg || !reg.id) {
+      this.notificar('No hay un turno activo para actualizar', 'alerta');
+      return;
+    }
+
+    if (!this.observacionActual.trim()) {
+      this.notificar('Escribe la nueva actividad o ubicación para actualizar', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    this.cdr.detectChanges();
+
+    this.registroService.actualizarRegistro(reg.id, { observacion: this.observacionActual.trim() }).then(() => {
+      this.notificar('¡Actividad actualizada en tiempo real!', 'exito');
       this.observacionActual = '';
+    }).catch(err => {
+      console.error(err);
+      this.notificar('Error al actualizar la actividad', 'alerta');
     }).finally(() => {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -271,7 +291,7 @@ export class App implements OnInit, OnDestroy {
 
   conmutarPausa(): void {
     const reg = this.registroActivo;
-    if (!reg) return;
+    if (!reg || !reg.id) return;
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
@@ -283,27 +303,28 @@ export class App implements OnInit, OnDestroy {
       ...(esTurno ? { horaPausaInicio: horaActual } : { horaPausaFin: horaActual })
     };
 
-    if (reg.id) {
-      this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
-        this.notificar(esTurno ? 'Pausa iniciada' : 'Jornada reanudada', 'info');
-      }).catch(() => {
-        Object.assign(reg, datosActualizar);
-        this.notificar(esTurno ? 'Pausa iniciada' : 'Jornada reanudada', 'info');
-      }).finally(() => {
-        this.cargandoAccion = false;
-        this.cdr.detectChanges();
-      });
-    } else {
-      Object.assign(reg, datosActualizar);
+    this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
       this.notificar(esTurno ? 'Pausa iniciada' : 'Jornada reanudada', 'info');
+    }).catch(err => console.error(err)).finally(() => {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
-    }
+    });
   }
 
-  marcarSalida(): void {
+  abrirModalSalida(): void {
     const reg = this.registroActivo;
     if (!reg) return;
+    this.reporteFinalTexto = '';
+    this.mostrarModalSalida = true;
+  }
+
+  cerrarModalSalida(): void {
+    this.mostrarModalSalida = false;
+  }
+
+  confirmarSalida(): void {
+    const reg = this.registroActivo;
+    if (!reg || !reg.id) return;
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
@@ -312,32 +333,30 @@ export class App implements OnInit, OnDestroy {
     const datosActualizar: Partial<Registro> = {
       horaSalida: ahora.toLocaleTimeString('es-ES'),
       estado: 'Completado',
-      totalHoras: 'Jornada Finalizada'
+      totalHoras: 'Jornada Finalizada',
+      reporteFinal: this.reporteFinalTexto.trim() || 'Jornada finalizada sin observaciones adicionales'
     };
 
-    if (reg.id) {
-      this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
-        this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'alerta');
-      }).catch(() => {
-        Object.assign(reg, datosActualizar);
-        this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'alerta');
-      }).finally(() => {
-        this.cargandoAccion = false;
-        this.cdr.detectChanges();
-      });
-    } else {
-      Object.assign(reg, datosActualizar);
-      this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'alerta');
+    this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
+      this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'exito');
+      this.mostrarModalSalida = false;
+      this.observacionActual = '';
+      this.reporteFinalTexto = '';
+    }).catch(err => {
+      console.error(err);
+      this.notificar('Error al guardar la salida', 'alerta');
+    }).finally(() => {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
-    }
+    });
   }
 
   get registrosFiltrados(): Registro[] {
     return this.registros.filter(r => {
       const coincideBusqueda = r.empleadoNombre.toLowerCase().includes(this.busquedaEmpleado.toLowerCase()) ||
                               r.departamento.toLowerCase().includes(this.busquedaEmpleado.toLowerCase()) ||
-                              (r.observacion && r.observacion.toLowerCase().includes(this.busquedaEmpleado.toLowerCase()));
+                              (r.observacion && r.observacion.toLowerCase().includes(this.busquedaEmpleado.toLowerCase())) ||
+                              (r.reporteFinal && r.reporteFinal.toLowerCase().includes(this.busquedaEmpleado.toLowerCase()));
       const coincideEstado = this.filtroEstado === 'TODOS' || r.estado === this.filtroEstado;
       return coincideBusqueda && coincideEstado;
     });
@@ -357,10 +376,7 @@ export class App implements OnInit, OnDestroy {
   eliminarRegistro(id?: string): void {
     if (!id) return;
     this.registroService.eliminarRegistro(id).then(() => {
-      this.notificar('Registro eliminado de la base de datos', 'info');
-    }).catch(() => {
-      this.registros = this.registros.filter(r => r.id !== id);
-      this.notificar('Registro eliminado localmente', 'info');
+      this.notificar('Registro eliminado de Firestore', 'info');
     });
   }
 
@@ -369,9 +385,9 @@ export class App implements OnInit, OnDestroy {
       this.notificar('No hay datos para exportar', 'alerta');
       return;
     }
-    let csv = "ID,Usuario,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad\n";
+    let csv = "ID,Usuario,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Inicial,Reporte Final\n";
     this.registros.forEach(r => {
-      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}"\n`;
+      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}","${r.reporteFinal || ''}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -380,7 +396,7 @@ export class App implements OnInit, OnDestroy {
     a.download = `Reporte_TickTock_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    this.notificar('Reporte CSV descargado con éxito', 'exito');
+    this.notificar('Reporte CSV generado con éxito', 'exito');
   }
 
   iniciarReloj(): void {
@@ -405,7 +421,4 @@ export class App implements OnInit, OnDestroy {
     this.mostrarToast = true;
     setTimeout(() => { this.mostrarToast = false; }, 3200);
   }
-
-  abrirModalEmpresa(): void { this.mostrarModalEmpresa = true; }
-  cerrarModalEmpresa(): void { this.mostrarModalEmpresa = false; }
 }
