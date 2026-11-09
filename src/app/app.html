@@ -2,20 +2,20 @@
   <!-- Toast Notification -->
   <div class="toast-notification" [class.show]="mostrarToast" [ngClass]="tipoToast">
     <span class="toast-icon">{{ tipoToast === 'exito' ? '✅' : (tipoToast === 'alerta' ? '⚠️' : 'ℹ️') }}</span>
-    <span>{{ mensajeToast }}</span>
+    <span class="toast-text">{{ mensajeToast }}</span>
   </div>
 
-  <!-- Modal Reporte Final de Salida -->
+  <!-- Modal Reporte Diario de Salida -->
   <div class="modal-overlay" *ngIf="mostrarModalSalida">
     <div class="modal-card">
-      <h3 class="modal-title">📝 Reporte Final de Jornada</h3>
-      <p class="modal-sub">Escribe un breve resumen de los logros o actividades concluidas en tu turno:</p>
+      <h3 class="modal-title">📝 Reporte Diario de Jornada</h3>
+      <p class="modal-sub">Escribe un resumen de las tareas concluidas hoy antes de marcar salida:</p>
       
       <textarea 
         class="textarea-emerald" 
         rows="4" 
         [(ngModel)]="reporteFinalTexto" 
-        placeholder="Ej: Se completó la revisión de reportes y atención a 5 usuarios...">
+        placeholder="Ej: Se finalizaron las pruebas del sistema, se entregó la documentación...">
       </textarea>
 
       <div class="modal-actions">
@@ -27,48 +27,120 @@
     </div>
   </div>
 
-  <!-- 1. PANTALLA DE BIENVENIDA -->
-  <div class="welcome-screen" *ngIf="pantallaActual === 'bienvenida'">
-    <div class="welcome-card-hero">
-      <div class="hero-badge">⏱️ TickTock v2.0</div>
-      <h1 class="welcome-title">TickTock</h1>
-      <p class="welcome-lead">Sistema Universal de Conteo de Horas y Control de Asistencia</p>
+  <!-- MODAL PARA QUE EL ADMIN REGISTRE ESTUDIANTES -->
+  <div class="modal-overlay" *ngIf="mostrarModalNuevoEstudiante">
+    <div class="modal-card">
+      <h3 class="modal-title">➕ Registrar Nuevo Estudiante / Colaborador</h3>
+      <p class="modal-sub">Ingresa las credenciales del estudiante para que pueda iniciar sesión o usar la plataforma:</p>
 
-      <div class="welcome-features">
-        <div class="feature-item">
-          <span>⏱️</span>
-          <div>
-            <strong>Control de Tiempo Preciso</strong>
-            <small>Registra tu hora de entrada, pausas y salida al instante</small>
-          </div>
-        </div>
-        <div class="feature-item">
-          <span>☁️</span>
-          <div>
-            <strong>Sincronización en Firestore</strong>
-            <small>Colecciones de 'usuarios' y 'registros' en tiempo real</small>
-          </div>
-        </div>
-        <div class="feature-item">
-          <span>📊</span>
-          <div>
-            <strong>Panel y Métricas de Tiempo</strong>
-            <small>Ideal para colaboradores, administradores u organizaciones</small>
-          </div>
+      <div class="form-group margin-b">
+        <label>Nombre Completo del Estudiante:</label>
+        <input type="text" class="input-emerald" [(ngModel)]="adminNuevoNombre" placeholder="Ej: Maria López">
+      </div>
+
+      <div class="form-group margin-b">
+        <label>Correo Electrónico:</label>
+        <input type="email" class="input-emerald" [(ngModel)]="adminNuevoCorreo" placeholder="estudiante@correo.com">
+      </div>
+
+      <div class="form-group margin-b">
+        <label>Asignar Contraseña:</label>
+        <input type="password" class="input-emerald" [(ngModel)]="adminNuevoPassword" placeholder="••••••••">
+      </div>
+
+      <div class="form-group margin-b">
+        <label>Área / Departamento:</label>
+        <select class="select-emerald" [(ngModel)]="adminNuevoDept">
+          <option *ngFor="let dep of departamentos" [value]="dep">{{ dep }}</option>
+        </select>
+      </div>
+
+      <div class="form-group margin-b">
+        <label>Avatar:</label>
+        <div class="avatar-selector-grid">
+          <button 
+            type="button" 
+            *ngFor="let av of avatares" 
+            class="avatar-btn" 
+            [class.selected]="adminNuevoAvatar === av" 
+            (click)="adminNuevoAvatar = av">
+            {{ av }}
+          </button>
         </div>
       </div>
 
-      <div class="welcome-actions">
-        <button class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión</button>
-        <button class="btn-hero-secondary" (click)="irAAuth('registro')">📝 Crear Cuenta Gratis</button>
+      <div class="modal-actions">
+        <button class="btn-cancel-modal" (click)="cerrarModalNuevoEstudiante()" [disabled]="cargandoAccion">Cancelar</button>
+        <button class="btn-confirm-emerald" (click)="registrarEstudiantePorAdmin()" [disabled]="cargandoAccion">
+          {{ cargandoAccion ? 'Guardando...' : '💾 Guardar Estudiante en Firestore' }}
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- 2. PANTALLA DE LOGIN / REGISTRO -->
+  <!-- Modal Configuración de Empresa -->
+  <div class="modal-overlay" *ngIf="mostrarModalEmpresa">
+    <div class="modal-card">
+      <h3 class="modal-title">🏢 Configuración de la Compañía</h3>
+      <p class="modal-sub">Actualiza los datos institucionales que se mostrarán en la plataforma y reportes:</p>
+      
+      <div class="form-group margin-b">
+        <label>Nombre de la Empresa / Organización:</label>
+        <input type="text" class="input-emerald" [(ngModel)]="empresa.nombre">
+      </div>
+      <div class="form-group margin-b">
+        <label>Sucursal / Campus:</label>
+        <input type="text" class="input-emerald" [(ngModel)]="empresa.sucursal">
+      </div>
+      <div class="form-group margin-b">
+        <label>Horario Oficial:</label>
+        <input type="text" class="input-emerald" [(ngModel)]="empresa.horario">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-confirm-emerald" (click)="cerrarModalEmpresa()">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. PANTALLA DE BIENVENIDA -->
+  <div class="welcome-screen" *ngIf="pantallaActual === 'bienvenida'">
+    <div class="welcome-card-hero">
+      <div class="hero-badge">⏱️ TickTock Enterprise v2.5</div>
+      <h1 class="welcome-title">TickTock</h1>
+      <div class="company-subtag">🏢 {{ empresa.nombre }}</div>
+      <p class="welcome-lead">Sistema Universal de Conteo de Horas, Asistencia y Reportes Mensuales</p>
+
+      <!-- Selector Rápido de Usuarios (Modo Kiosk) -->
+      <div class="kiosk-fast-selector" *ngIf="usuariosSistema.length > 0">
+        <h3>⚡ Selección Rápida de Colaborador</h3>
+        <p>Haz clic en tu nombre para ingresar directamente al panel de marcaje:</p>
+        <div class="user-chip-grid">
+          <button 
+            type="button" 
+            class="user-quick-chip" 
+            *ngFor="let u of usuariosSistema" 
+            (click)="seleccionarUsuarioDirecto(u)">
+            <span class="chip-avatar">{{ u.avatar }}</span>
+            <div class="chip-info">
+              <strong>{{ u.nombre }}</strong>
+              <small>{{ u.rol === 'admin' ? '👑 Admin' : u.departamento }}</small>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <div class="welcome-actions">
+        <button class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión con Credenciales</button>
+        <button class="btn-hero-secondary" (click)="irAAuth('registro')">📝 Registrar Nueva Cuenta / Empresa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. LOGIN / REGISTRO PÚBLICO -->
   <div class="auth-screen" *ngIf="pantallaActual === 'login' || pantallaActual === 'registro'">
     <div class="auth-card">
-      <button class="btn-back-link" (click)="irABienvenida()">← Volver a TickTock</button>
+      <button class="btn-back-link" (click)="irABienvenida()">← Volver al Inicio</button>
       
       <div class="auth-tabs">
         <button [class.active]="tabAuth === 'login'" (click)="irAAuth('login')">Iniciar Sesión</button>
@@ -79,7 +151,7 @@
       <form *ngIf="tabAuth === 'login'" (ngSubmit)="ejecutarLogin()">
         <div class="form-group margin-b">
           <label>Correo Electrónico:</label>
-          <input type="email" class="input-emerald" [(ngModel)]="formCorreo" name="correo" placeholder="tu-correo@ejemplo.com" required>
+          <input type="email" class="input-emerald" [(ngModel)]="formCorreo" name="correo" placeholder="tu-correo@empresa.com" required>
         </div>
 
         <div class="form-group margin-b">
@@ -88,12 +160,17 @@
         </div>
 
         <button type="submit" class="btn-confirm-emerald width-100" [disabled]="cargandoAccion">
-          {{ cargandoAccion ? 'Ingresando...' : 'Entrar a TickTock' }}
+          {{ cargandoAccion ? 'Verificando...' : 'Entrar a TickTock' }}
         </button>
       </form>
 
       <!-- Formulario Registro -->
       <form *ngIf="tabAuth === 'registro'" (ngSubmit)="ejecutarRegistro()">
+        <div class="form-group margin-b">
+          <label>Nombre de tu Empresa u Organización:</label>
+          <input type="text" class="input-emerald" [(ngModel)]="formEmpresaNombre" name="empresaNombre" placeholder="Ej: Universidad UTNG / Empresa S.A." required>
+        </div>
+
         <div class="form-group margin-b">
           <label>Nombre Completo:</label>
           <input type="text" class="input-emerald" [(ngModel)]="formNombre" name="nombre" placeholder="Ej: Alex Rivera" required>
@@ -101,7 +178,7 @@
 
         <div class="form-group margin-b">
           <label>Correo Electrónico:</label>
-          <input type="email" class="input-emerald" [(ngModel)]="formCorreo" name="correo" placeholder="usuario@correo.com" required>
+          <input type="email" class="input-emerald" [(ngModel)]="formCorreo" name="correo" placeholder="usuario@empresa.com" required>
         </div>
 
         <div class="form-group margin-b">
@@ -111,15 +188,15 @@
 
         <div class="form-row margin-b">
           <div class="form-group flex-1">
-            <label>Tipo de Usuario:</label>
+            <label>Rol:</label>
             <select class="select-emerald" [(ngModel)]="formRol" name="rol">
-              <option value="estudiante">👤 Colaborador / Usuario</option>
+              <option value="estudiante">👤 Estudiante / Colaborador</option>
               <option value="admin">👑 Administrador</option>
             </select>
           </div>
 
           <div class="form-group flex-1">
-            <label>Área / Equipo:</label>
+            <label>Área:</label>
             <select class="select-emerald" [(ngModel)]="formDepartamento" name="departamento">
               <option *ngFor="let dep of departamentos" [value]="dep">{{ dep }}</option>
             </select>
@@ -127,7 +204,7 @@
         </div>
 
         <div class="form-group margin-b">
-          <label>Selecciona tu Avatar:</label>
+          <label>Avatar:</label>
           <div class="avatar-selector-grid">
             <button 
               type="button" 
@@ -141,24 +218,27 @@
         </div>
 
         <button type="submit" class="btn-confirm-emerald width-100" [disabled]="cargandoAccion">
-          {{ cargandoAccion ? 'Creando cuenta...' : 'Crear Cuenta en TickTock' }}
+          {{ cargandoAccion ? 'Creando cuenta...' : 'Crear Cuenta y Vincular Empresa' }}
         </button>
       </form>
     </div>
   </div>
 
-  <!-- 3. DASHBOARD -->
-  <ng-container *ngIf="pantallaActual === 'dashboard' && usuarioActual">
+  <!-- 3. DASHBOARD Y VISTAS -->
+  <ng-container *ngIf="(pantallaActual === 'dashboard' || pantallaActual === 'reporteMensual') && usuarioActual">
     <header class="welcome-hero">
       <div class="hero-brand">
         <div class="utng-logo-chip">⏱️ TickTock</div>
         <div>
           <h1 class="hero-title">{{ empresa.nombre }}</h1>
-          <p class="hero-subtitle">Conteo de Horas y Asistencia • Usuario: <strong>{{ usuarioActual.nombre }}</strong></p>
+          <p class="hero-subtitle">Plataforma de Control de Asistencia • {{ empresa.sucursal }}</p>
         </div>
       </div>
 
       <div class="hero-actions">
+        <button class="btn-nav-tab" [class.active]="pantallaActual === 'dashboard'" (click)="pantallaActual = 'dashboard'">📊 Panel Diario</button>
+        <button class="btn-nav-tab" [class.active]="pantallaActual === 'reporteMensual'" (click)="pantallaActual = 'reporteMensual'">🗓️ Reporte Mensual</button>
+        
         <div class="user-badge-header">
           <span class="user-avatar-chip">{{ usuarioActual.avatar }}</span>
           <div>
@@ -167,7 +247,7 @@
           </div>
         </div>
 
-        <button class="btn-logout-chip" (click)="cerrarSesion()">🔒 Cerrar Sesión</button>
+        <button class="btn-logout-chip" (click)="cerrarSesion()">🔒 Salir</button>
       </div>
     </header>
 
@@ -175,204 +255,283 @@
       <div class="info-chips">
         <span class="chip">📍 Área: <strong>{{ usuarioActual.departamento }}</strong></span>
         <span class="chip">⏰ Horario: <strong>{{ empresa.horario }}</strong></span>
+        <button class="chip-edit-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="abrirModalEmpresa()">⚙️ Configurar Empresa</button>
       </div>
 
       <div class="digital-clock-card">
-        <div class="clock-live-dot"><span class="pulse-green"></span> TIEMPO REAL</div>
+        <div class="clock-live-dot"><span class="pulse-green"></span> EN VIVO</div>
         <div class="clock-time"><span>{{ relojHora }}</span> <small>{{ relojAmPm }}</small></div>
         <div class="clock-date">{{ relojFecha }}</div>
       </div>
     </div>
 
     <main class="main-content">
-      <!-- VISTA COLABORADOR / USUARIO -->
-      <section class="card kiosk-card" *ngIf="usuarioActual.rol === 'estudiante'">
-        <div class="card-header-emerald">
-          <h2>⏱️ Panel de Registro de Horas</h2>
-          <p>Escribe tu actividad obligatoria para iniciar turno y actualízala cuando lo requieras</p>
-        </div>
+      <!-- PANEL DIARIO -->
+      <ng-container *ngIf="pantallaActual === 'dashboard'">
+        <!-- VISTA COLABORADOR / ESTUDIANTE -->
+        <section class="card kiosk-card" *ngIf="usuarioActual.rol === 'estudiante'">
+          <div class="card-header-emerald">
+            <h2>⏱️ Registro de Asistencia y Actividades Diarias</h2>
+            <p>Ingresa obligatoriamente la actividad a realizar antes de iniciar el turno:</p>
+          </div>
 
-        <!-- Formulario de Actividad -->
-        <div class="form-group margin-b">
-          <label><strong>Actividad / Objetivo del Día <span class="req-star">*</span>:</strong></label>
-          <div class="activity-input-row">
-            <input 
-              type="text" 
-              class="input-emerald flex-1" 
-              [(ngModel)]="observacionActual" 
-              placeholder="Ej: Desarrollo de módulos, atención a clientes, pruebas de software...">
-            
+          <!-- Input de Actividad -->
+          <div class="form-group margin-b">
+            <label><strong>Actividad u Objetivo del Día <span class="req-star">*</span>:</strong></label>
+            <div class="activity-input-row">
+              <input 
+                type="text" 
+                class="input-emerald flex-1" 
+                [(ngModel)]="observacionActual" 
+                placeholder="Ej: Desarrollo de módulos, servicio al cliente, revisión de tareas...">
+              
+              <button 
+                type="button" 
+                class="btn-update-act" 
+                *ngIf="estaEnTurno || estaEnPausa" 
+                (click)="actualizarActividad()" 
+                [disabled]="cargandoAccion">
+                🔄 Actualizar Actividad
+              </button>
+            </div>
+            <small class="info-note" *ngIf="!estaEnTurno && !estaEnPausa">
+              * Campo requerido para habilitar el botón "MARCAR ENTRADA".
+            </small>
+            <small class="info-note" *ngIf="estaEnTurno || estaEnPausa">
+              * Puedes actualizar tu actividad o ubicación en cualquier momento durante tu turno.
+            </small>
+          </div>
+
+          <!-- Indicador de Estado -->
+          <div class="status-card-box">
+            <div class="user-meta">
+              <div class="user-avatar">{{ usuarioActual.avatar }}</div>
+              <div>
+                <h3>{{ usuarioActual.nombre }}</h3>
+                <span class="badge-dept-green">{{ usuarioActual.departamento }}</span>
+              </div>
+            </div>
+
+            <div class="status-indicator" [ngClass]="{'is-turno': estaEnTurno, 'is-pausa': estaEnPausa, 'is-off': !estaEnTurno && !estaEnPausa}">
+              <span class="status-dot"></span>
+              <span>ESTADO: <strong>{{ estaEnTurno ? 'EN TURNO ACTIVO' : (estaEnPausa ? 'EN PAUSA' : 'SIN MARCAJE ACTIVO') }}</strong></span>
+            </div>
+          </div>
+
+          <!-- Botones Kiosk -->
+          <div class="kiosk-buttons-grid">
             <button 
-              type="button" 
-              class="btn-update-act" 
-              *ngIf="estaEnTurno || estaEnPausa" 
-              (click)="actualizarActividad()" 
-              [disabled]="cargandoAccion">
-              🔄 Actualizar Actividad
+              type="button"
+              class="btn-kiosk btn-green" 
+              (click)="marcarEntrada()" 
+              [disabled]="estaEnTurno || estaEnPausa || cargandoAccion">
+              <span class="kiosk-icon">🟢</span>
+              <div>
+                <strong>MARCAR ENTRADA</strong>
+                <small>Iniciar Conteo Diario</small>
+              </div>
+            </button>
+
+            <button 
+              type="button"
+              class="btn-kiosk btn-amber" 
+              (click)="conmutarPausa()" 
+              [disabled]="(!estaEnTurno && !estaEnPausa) || cargandoAccion">
+              <span class="kiosk-icon">{{ estaEnPausa ? '▶️' : '☕' }}</span>
+              <div>
+                <strong>{{ estaEnPausa ? 'REANUDAR' : 'INICIAR PAUSA' }}</strong>
+                <small>{{ estaEnPausa ? 'Volver al Trabajo' : 'Pausar Temporizador' }}</small>
+              </div>
+            </button>
+
+            <button 
+              type="button"
+              class="btn-kiosk btn-red" 
+              (click)="abrirModalSalida()" 
+              [disabled]="(!estaEnTurno && !estaEnPausa) || cargandoAccion">
+              <span class="kiosk-icon">🔴</span>
+              <div>
+                <strong>MARCAR SALIDA</strong>
+                <small>Concluir con Reporte Diario</small>
+              </div>
             </button>
           </div>
-          <small class="info-note" *ngIf="!estaEnTurno && !estaEnPausa">
-            * Campo obligatorio para poder presionar "Marcar Entrada".
-          </small>
-          <small class="info-note" *ngIf="estaEnTurno || estaEnPausa">
-            * Escribe una nueva actividad y presiona "Actualizar Actividad" para modificar tu registro en tiempo real.
-          </small>
-        </div>
 
-        <!-- Indicador de Estado -->
-        <div class="status-card-box">
-          <div class="user-meta">
-            <div class="user-avatar">{{ usuarioActual.avatar }}</div>
-            <div>
-              <h3>{{ usuarioActual.nombre }}</h3>
-              <span class="badge-dept-green">{{ usuarioActual.departamento }}</span>
+          <!-- Mis Registros de Hoy -->
+          <div class="margin-top-2">
+            <h3>📋 Mis Marcajes de Hoy</h3>
+            <table class="emerald-table margin-top">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Entrada</th>
+                  <th>Pausa</th>
+                  <th>Salida</th>
+                  <th>Estado</th>
+                  <th>Actividad Inicial</th>
+                  <th>Reporte Diario Final</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let reg of misRegistrosEstudiante">
+                  <td>{{ reg.fecha }}</td>
+                  <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
+                  <td><span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span><span *ngIf="!reg.horaPausaInicio">--:--</span></td>
+                  <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
+                  <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
+                  <td>{{ reg.observacion }}</td>
+                  <td><em>{{ reg.reporteFinal || 'En curso...' }}</em></td>
+                </tr>
+                <tr *ngIf="misRegistrosEstudiante.length === 0">
+                  <td colspan="7" class="empty-row">Aún no registras actividades hoy. ¡Escribe tu objetivo y presiona Marcar Entrada!</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VISTA ADMINISTRADOR -->
+        <section class="card" *ngIf="usuarioActual.rol === 'admin'">
+          <div class="kpi-grid">
+            <div class="kpi-box">
+              <div class="kpi-icon icon-green">👥</div>
+              <div><h3>{{ totalEstudiantes }}</h3><span>Estudiantes Registrados</span></div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-icon icon-emerald">🟢</div>
+              <div><h3>{{ personalEnTurno }}</h3><span>En Turno Activo</span></div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-icon icon-amber">☕</div>
+              <div><h3>{{ personalEnPausa }}</h3><span>En Pausa</span></div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-icon icon-blue">✅</div>
+              <div><h3>{{ totalCompletados }}</h3><span>Jornadas Concluidas</span></div>
             </div>
           </div>
 
-          <div class="status-indicator" [ngClass]="{'is-turno': estaEnTurno, 'is-pausa': estaEnPausa, 'is-off': !estaEnTurno && !estaEnPausa}">
-            <span class="status-dot"></span>
-            <span>ESTADO: <strong>{{ estaEnTurno ? 'EN JORNADA ACTIVA' : (estaEnPausa ? 'EN PAUSA' : 'SIN REGISTRO ACTIVO') }}</strong></span>
+          <!-- BOTÓN PARA REGISTRAR ALUMNOS DESDE EL PANEL DE ADMIN -->
+          <div class="table-header-bar margin-top-2">
+            <h3>👥 Directorio de Estudiantes y Colaboradores</h3>
+            <button class="btn-confirm-emerald" (click)="abrirModalNuevoEstudiante()">
+              ➕ Registrar Nuevo Estudiante / Colaborador
+            </button>
           </div>
-        </div>
 
-        <!-- Botones de Marcaje -->
-        <div class="kiosk-buttons-grid">
-          <button 
-            type="button"
-            class="btn-kiosk btn-green" 
-            (click)="marcarEntrada()" 
-            [disabled]="estaEnTurno || estaEnPausa || cargandoAccion">
-            <span class="kiosk-icon">🟢</span>
-            <div>
-              <strong>MARCAR ENTRADA</strong>
-              <small>Iniciar Conteo con Actividad</small>
+          <div class="table-responsive margin-top">
+            <table class="emerald-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                  <th>Rol</th>
+                  <th>Área / Departamento</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let u of usuariosSistema">
+                  <td><strong>{{ u.avatar }} {{ u.nombre }}</strong></td>
+                  <td>{{ u.correo }}</td>
+                  <td><span class="badge-status" [ngClass]="{'st-turno': u.rol==='admin', 'st-completado': u.rol==='estudiante'}">{{ u.rol === 'admin' ? '👑 Admin' : '👤 Estudiante' }}</span></td>
+                  <td><span class="badge-dept-green">{{ u.departamento }}</span></td>
+                  <td><button class="btn-delete-row" (click)="eliminarUsuario(u.id)">🗑️ Eliminar</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="table-header-bar margin-top-2">
+            <h3>📊 Bitácora General de Marcajes</h3>
+            <div class="admin-toolbar">
+              <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar colaborador, área o actividad...">
+              <select class="select-emerald" [(ngModel)]="filtroEstado">
+                <option value="TODOS">Todos los estados</option>
+                <option value="En Turno">🟢 En Turno</option>
+                <option value="En Pausa">☕ En Pausa</option>
+                <option value="Completado">✅ Completados</option>
+              </select>
             </div>
-          </button>
-
-          <button 
-            type="button"
-            class="btn-kiosk btn-amber" 
-            (click)="conmutarPausa()" 
-            [disabled]="(!estaEnTurno && !estaEnPausa) || cargandoAccion">
-            <span class="kiosk-icon">{{ estaEnPausa ? '▶️' : '☕' }}</span>
-            <div>
-              <strong>{{ estaEnPausa ? 'REANUDAR' : 'INICIAR PAUSA' }}</strong>
-              <small>{{ estaEnPausa ? 'Volver a la Actividad' : 'Pausar Temporizador' }}</small>
-            </div>
-          </button>
-
-          <button 
-            type="button"
-            class="btn-kiosk btn-red" 
-            (click)="abrirModalSalida()" 
-            [disabled]="(!estaEnTurno && !estaEnPausa) || cargandoAccion">
-            <span class="kiosk-icon">🔴</span>
-            <div>
-              <strong>MARCAR SALIDA</strong>
-              <small>Concluir con Reporte Final</small>
-            </div>
-          </button>
-        </div>
-
-        <!-- Tabla Personal -->
-        <div class="margin-top-2">
-          <h3>📋 Mis Registros de Tiempo de Hoy</h3>
-          <table class="emerald-table margin-top">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Entrada</th>
-                <th>Pausa</th>
-                <th>Salida</th>
-                <th>Estado</th>
-                <th>Actividad</th>
-                <th>Reporte Final</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let reg of misRegistrosEstudiante">
-                <td>{{ reg.fecha }}</td>
-                <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
-                <td><span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span><span *ngIf="!reg.horaPausaInicio">--:--</span></td>
-                <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
-                <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
-                <td>{{ reg.observacion }}</td>
-                <td><em>{{ reg.reporteFinal || 'En curso...' }}</em></td>
-              </tr>
-              <tr *ngIf="misRegistrosEstudiante.length === 0">
-                <td colspan="7" class="empty-row">Aún no tienes registros hoy. ¡Ingresa tu actividad y presiona Marcar Entrada!</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- VISTA ADMINISTRADOR -->
-      <section class="card" *ngIf="usuarioActual.rol === 'admin'">
-        <div class="kpi-grid">
-          <div class="kpi-box">
-            <div class="kpi-icon icon-green">👥</div>
-            <div><h3>{{ totalEstudiantes }}</h3><span>Usuarios Totales</span></div>
           </div>
-          <div class="kpi-box">
-            <div class="kpi-icon icon-emerald">🟢</div>
-            <div><h3>{{ personalEnTurno }}</h3><span>En Actividad Activa</span></div>
-          </div>
-          <div class="kpi-box">
-            <div class="kpi-icon icon-amber">☕</div>
-            <div><h3>{{ personalEnPausa }}</h3><span>En Receso</span></div>
-          </div>
-          <div class="kpi-box">
-            <div class="kpi-icon icon-blue">✅</div>
-            <div><h3>{{ totalCompletados }}</h3><span>Jornadas Concluidas</span></div>
-          </div>
-        </div>
 
-        <div class="table-header-bar margin-top-2">
-          <h3>📊 Bitácora General (Firestore)</h3>
+          <div class="table-responsive margin-top">
+            <table class="emerald-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Área / Equipo</th>
+                  <th>Fecha</th>
+                  <th>Entrada</th>
+                  <th>Pausa</th>
+                  <th>Salida</th>
+                  <th>Estado</th>
+                  <th>Actividad Inicial</th>
+                  <th>Reporte Final</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let reg of registrosFiltrados">
+                  <td><strong>{{ reg.empleadoNombre }}</strong></td>
+                  <td><span class="badge-dept-green">{{ reg.departamento }}</span></td>
+                  <td>{{ reg.fecha }}</td>
+                  <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
+                  <td><span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span><span *ngIf="!reg.horaPausaInicio">--:--</span></td>
+                  <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
+                  <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
+                  <td>{{ reg.observacion }}</td>
+                  <td><em>{{ reg.reporteFinal || '--' }}</em></td>
+                  <td><button class="btn-delete-row" (click)="eliminarRegistro(reg.id)">🗑️</button></td>
+                </tr>
+                <tr *ngIf="registrosFiltrados.length === 0">
+                  <td colspan="10" class="empty-row">No hay registros coincidentes.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </ng-container>
+
+      <!-- REPORTE MENSUAL CON EXPORTACIÓN EXCEL -->
+      <section class="card" *ngIf="pantallaActual === 'reporteMensual'">
+        <div class="table-header-bar">
+          <div>
+            <h2>🗓️ Consolidado de Reportes Mensuales</h2>
+            <p class="subtitle-text">Genera y descarga el historial completo de actividades diarias en Excel / CSV</p>
+          </div>
+
           <div class="admin-toolbar">
-            <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar por usuario, área o actividad...">
-            <select class="select-emerald" [(ngModel)]="filtroEstado">
-              <option value="TODOS">Todos los estados</option>
-              <option value="En Turno">🟢 En Actividad</option>
-              <option value="En Pausa">☕ En Pausa</option>
-              <option value="Completado">✅ Completados</option>
-            </select>
-            <button class="btn-export-emerald" (click)="exportarCSV()">📥 Exportar Reporte CSV</button>
+            <input type="month" class="input-emerald" [(ngModel)]="mesFiltroReporte">
+            <button class="btn-export-excel" (click)="exportarExcelMensual()">📥 Descargar Reporte Excel (.CSV)</button>
           </div>
         </div>
 
-        <div class="table-responsive margin-top">
+        <div class="table-responsive margin-top-2">
           <table class="emerald-table">
             <thead>
               <tr>
-                <th>Usuario</th>
-                <th>Área / Departamento</th>
                 <th>Fecha</th>
-                <th>Entrada</th>
-                <th>Pausa</th>
-                <th>Salida</th>
-                <th>Estado</th>
-                <th>Actividad</th>
-                <th>Reporte Final</th>
-                <th>Acción</th>
+                <th>Colaborador</th>
+                <th>Departamento</th>
+                <th>Hora Entrada</th>
+                <th>Hora Salida</th>
+                <th>Actividad Diario Inicial</th>
+                <th>Reporte Diario Final</th>
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let reg of registrosFiltrados">
-                <td><strong>{{ reg.empleadoNombre }}</strong></td>
+              <tr *ngFor="let reg of registrosDelMes">
+                <td><strong>{{ reg.fecha }}</strong></td>
+                <td>{{ reg.empleadoNombre }}</td>
                 <td><span class="badge-dept-green">{{ reg.departamento }}</span></td>
-                <td>{{ reg.fecha }}</td>
                 <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
-                <td><span class="tag-time pause" *ngIf="reg.horaPausaInicio">☕ {{ reg.horaPausaInicio }}</span><span *ngIf="!reg.horaPausaInicio">--:--</span></td>
-                <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
-                <td><span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">{{ reg.estado }}</span></td>
+                <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">En proceso</span></td>
                 <td>{{ reg.observacion }}</td>
-                <td><em>{{ reg.reporteFinal || '--' }}</em></td>
-                <td><button class="btn-delete-row" (click)="eliminarRegistro(reg.id)">🗑️</button></td>
+                <td><em>{{ reg.reporteFinal || 'Sin reporte final' }}</em></td>
               </tr>
-              <tr *ngIf="registrosFiltrados.length === 0">
-                <td colspan="10" class="empty-row">No hay registros de tiempo coincidentes.</td>
+              <tr *ngIf="registrosDelMes.length === 0">
+                <td colspan="7" class="empty-row">No existen registros guardados para el mes seleccionado ({{ mesFiltroReporte }}).</td>
               </tr>
             </tbody>
           </table>

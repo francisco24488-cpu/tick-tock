@@ -12,25 +12,35 @@ import { RegistroService, Empresa, Usuario, Registro } from './services/registro
   encapsulation: ViewEncapsulation.None
 })
 export class App implements OnInit, OnDestroy {
-  pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' = 'bienvenida';
+  pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' | 'reporteMensual' = 'bienvenida';
   tabAuth: 'login' | 'registro' = 'login';
 
   usuarioActual: Usuario | null = null;
   sesionIniciada: boolean = false;
 
+  empresa: Empresa = { 
+    nombre: 'Plataforma TickTock', 
+    sucursal: 'Campus Central / Edificio D', 
+    codigo: 'TT-2026-GLOBAL', 
+    horario: '08:00 AM - 06:00 PM' 
+  };
+
+  // Formularios de Autenticación Pública
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
   formRol: 'estudiante' | 'admin' = 'estudiante';
   formDepartamento: string = 'General';
   formAvatar: string = '🧑‍💻';
+  formEmpresaNombre: string = 'Plataforma TickTock';
 
-  empresa: Empresa = { 
-    nombre: 'TickTock', 
-    sucursal: 'Plataforma Global', 
-    codigo: 'TT-2026', 
-    horario: '08:00 AM - 06:00 PM' 
-  };
+  // Formulario para que el Administrador dé de alta a estudiantes
+  mostrarModalNuevoEstudiante: boolean = false;
+  adminNuevoNombre: string = '';
+  adminNuevoCorreo: string = '';
+  adminNuevoPassword: string = '';
+  adminNuevoDept: string = 'General';
+  adminNuevoAvatar: string = '🧑‍💻';
 
   usuariosSistema: Usuario[] = [];
   registros: Registro[] = [];
@@ -38,23 +48,29 @@ export class App implements OnInit, OnDestroy {
   observacionActual: string = '';
   cargandoAccion: boolean = false;
 
+  // Modales adicionales
   mostrarModalSalida: boolean = false;
+  mostrarModalEmpresa: boolean = false;
   reporteFinalTexto: string = '';
 
+  // Filtros
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
+  mesFiltroReporte: string = new Date().toISOString().substring(0, 7); // Formato YYYY-MM
 
+  // Reloj
   relojHora: string = '00:00:00';
   relojAmPm: string = 'PM';
   relojFecha: string = '';
   private timerId: any;
 
+  // Toast
   mostrarToast: boolean = false;
   mensajeToast: string = '';
   tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
 
-  avatares = ['🧑‍💻', '👨‍💼', '👩‍💼', '👑', '📁', '⚙️', '📊', '👤'];
-  departamentos = ['General', 'Administración', 'Desarrollo & TI', 'Operaciones', 'Ventas & Marketing'];
+  avatares = ['🧑‍💻', '👨‍💼', '👩‍💼', '👑', '📁', '⚙️', '📊', '👤', '🚀', '🧪'];
+  departamentos = ['General', 'Administración', 'Desarrollo & TI', 'Operaciones', 'Ventas & Marketing', 'Servicio Social'];
 
   constructor(
     private registroService: RegistroService,
@@ -70,7 +86,7 @@ export class App implements OnInit, OnDestroy {
         this.registros = data || [];
         this.cdr.detectChanges();
       },
-      error: (err: any) => console.error('Error sincronizando registros:', err)
+      error: (err: any) => console.error('Error registros:', err)
     });
 
     this.registroService.getUsuarios().subscribe({
@@ -78,7 +94,7 @@ export class App implements OnInit, OnDestroy {
         this.usuariosSistema = data || [];
         this.cdr.detectChanges();
       },
-      error: (err: any) => console.error('Error sincronizando usuarios:', err)
+      error: (err: any) => console.error('Error usuarios:', err)
     });
   }
 
@@ -95,6 +111,69 @@ export class App implements OnInit, OnDestroy {
     this.pantallaActual = 'bienvenida';
   }
 
+  // --- SELECCIÓN RÁPIDA EN MODO KIOSK ---
+  seleccionarUsuarioDirecto(usuario: Usuario): void {
+    this.iniciarSesionUsuario(usuario);
+    this.notificar(`Acceso rápido: ${usuario.nombre}`, 'exito');
+  }
+
+  // --- FUNCIONALIDAD: EL ADMINISTRADOR REGISTRA A SUS ALUMNOS ---
+  abrirModalNuevoEstudiante(): void {
+    this.adminNuevoNombre = '';
+    this.adminNuevoCorreo = '';
+    this.adminNuevoPassword = '';
+    this.adminNuevoDept = 'General';
+    this.adminNuevoAvatar = '🧑‍💻';
+    this.mostrarModalNuevoEstudiante = true;
+  }
+
+  cerrarModalNuevoEstudiante(): void {
+    this.mostrarModalNuevoEstudiante = false;
+  }
+
+  async registrarEstudiantePorAdmin(): Promise<void> {
+    if (!this.adminNuevoNombre.trim() || !this.adminNuevoCorreo.trim() || !this.adminNuevoPassword.trim()) {
+      this.notificar('Por favor completa el nombre, correo y contraseña del estudiante', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    this.cdr.detectChanges();
+
+    const correoNormalizado = this.adminNuevoCorreo.trim().toLowerCase();
+
+    try {
+      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNormalizado);
+      if (existe) {
+        this.notificar('Este correo ya está registrado en la base de datos', 'alerta');
+        this.cargandoAccion = false;
+        this.cdr.detectChanges();
+        return;
+      }
+
+      const nuevoEstudiante: Usuario = {
+        nombre: this.adminNuevoNombre.trim(),
+        correo: correoNormalizado,
+        password: this.adminNuevoPassword.trim(),
+        rol: 'estudiante',
+        departamento: this.adminNuevoDept,
+        avatar: this.adminNuevoAvatar,
+        puesto: 'Estudiante / Colaborador',
+        empresaNombre: this.empresa.nombre
+      };
+
+      await this.registroService.registrarUsuario(nuevoEstudiante);
+      this.notificar(`¡Estudiante ${nuevoEstudiante.nombre} registrado con éxito en Firestore!`, 'exito');
+      this.mostrarModalNuevoEstudiante = false;
+    } catch (error) {
+      console.error(error);
+      this.notificar('Error al guardar el nuevo estudiante', 'alerta');
+    } finally {
+      this.cargandoAccion = false;
+      this.cdr.detectChanges();
+    }
+  }
+
   async ejecutarRegistro(): Promise<void> {
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
       this.notificar('Por favor completa todos los campos requeridos', 'alerta');
@@ -104,11 +183,12 @@ export class App implements OnInit, OnDestroy {
     this.cargandoAccion = true;
     this.cdr.detectChanges();
 
+    const correoNormalizado = this.formCorreo.trim().toLowerCase();
+
     try {
-      const correoNormalizado = this.formCorreo.trim().toLowerCase();
       const existe = await this.registroService.buscarUsuarioPorCorreo(correoNormalizado);
       if (existe) {
-        this.notificar('Este correo ya está registrado en la base de datos', 'alerta');
+        this.notificar('Este correo ya está registrado', 'alerta');
         this.cargandoAccion = false;
         this.cdr.detectChanges();
         return;
@@ -121,18 +201,19 @@ export class App implements OnInit, OnDestroy {
         rol: this.formRol,
         departamento: this.formDepartamento,
         avatar: this.formAvatar,
-        puesto: this.formRol === 'admin' ? 'Administrador' : 'Colaborador'
+        puesto: this.formRol === 'admin' ? 'Administrador General' : 'Estudiante / Colaborador',
+        empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre
       };
 
       const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
       nuevoUsuario.id = docRef.id;
 
       this.iniciarSesionUsuario(nuevoUsuario);
-      this.notificar(`¡Cuenta registrada! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
+      this.notificar(`¡Cuenta creada e iniciada! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
       this.limpiarFormularioAuth();
     } catch (error) {
       console.error(error);
-      this.notificar('Error de conexión con Firestore', 'alerta');
+      this.notificar('Error de conexión con la base de datos', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -159,14 +240,14 @@ export class App implements OnInit, OnDestroy {
 
       if (usuario && usuario.password === passBuscada) {
         this.iniciarSesionUsuario(usuario);
-        this.notificar(`Sesión iniciada como ${usuario.rol === 'admin' ? '👑 Administrador' : '👤 Colaborador'}`, 'exito');
+        this.notificar(`Bienvenido de nuevo, ${usuario.nombre}`, 'exito');
         this.limpiarFormularioAuth();
       } else {
         this.notificar('Correo o contraseña incorrectos', 'alerta');
       }
     } catch (error) {
-      console.error('Error durante login:', error);
-      this.notificar('Error al verificar credenciales', 'alerta');
+      console.error(error);
+      this.notificar('Error de autenticación', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -177,6 +258,9 @@ export class App implements OnInit, OnDestroy {
     this.usuarioActual = { ...usuario };
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
+    if (usuario.empresaNombre) {
+      this.empresa.nombre = usuario.empresaNombre;
+    }
     localStorage.setItem('ticktock_user', JSON.stringify(this.usuarioActual));
   }
 
@@ -197,6 +281,9 @@ export class App implements OnInit, OnDestroy {
           this.usuarioActual = user;
           this.sesionIniciada = true;
           this.pantallaActual = 'dashboard';
+          if (user.empresaNombre) {
+            this.empresa.nombre = user.empresaNombre;
+          }
         }
       } catch (e) {
         localStorage.removeItem('ticktock_user');
@@ -210,6 +297,7 @@ export class App implements OnInit, OnDestroy {
     this.formPassword = '';
   }
 
+  // --- REGISTRO DIARIO Y REPORTES ---
   get registroActivo(): Registro | undefined {
     if (!this.usuarioActual) return undefined;
     const userId = String(this.usuarioActual.id || this.usuarioActual.correo);
@@ -219,39 +307,36 @@ export class App implements OnInit, OnDestroy {
     );
   }
 
-  get estaEnTurno(): boolean {
-    return this.registroActivo?.estado === 'En Turno';
-  }
-
-  get estaEnPausa(): boolean {
-    return this.registroActivo?.estado === 'En Pausa';
-  }
+  get estaEnTurno(): boolean { return this.registroActivo?.estado === 'En Turno'; }
+  get estaEnPausa(): boolean { return this.registroActivo?.estado === 'En Pausa'; }
 
   marcarEntrada(): void {
     if (!this.usuarioActual) return;
 
     if (!this.observacionActual.trim()) {
-      this.notificar('⚠️ La actividad u objetivo inicial es OBLIGATORIA para iniciar turno', 'alerta');
+      this.notificar('⚠️ La actividad u objetivo del día es OBLIGATORIA para iniciar turno', 'alerta');
       return;
     }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const ahora = new Date();
+    const mesAno = ahora.toISOString().substring(0, 7);
 
     const nuevo: Registro = {
       empleadoId: String(this.usuarioActual.id || this.usuarioActual.correo),
       empleadoNombre: this.usuarioActual.nombre,
-      puesto: this.usuarioActual.puesto || 'Colaborador',
+      puesto: this.usuarioActual.puesto || 'Estudiante / Colaborador',
       departamento: this.usuarioActual.departamento || 'General',
       fecha: ahora.toLocaleDateString('es-ES'),
+      mesAno: mesAno,
       horaEntrada: ahora.toLocaleTimeString('es-ES'),
       estado: 'En Turno',
       observacion: this.observacionActual.trim()
     };
 
     this.registroService.agregarRegistro(nuevo).then(() => {
-      this.notificar(`Entrada guardada a las ${nuevo.horaEntrada}`, 'exito');
+      this.notificar(`Entrada guardada en Firestore a las ${nuevo.horaEntrada}`, 'exito');
       this.observacionActual = '';
     }).catch(err => {
       console.error(err);
@@ -278,7 +363,7 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     this.registroService.actualizarRegistro(reg.id, { observacion: this.observacionActual.trim() }).then(() => {
-      this.notificar('¡Actividad actualizada en tiempo real!', 'exito');
+      this.notificar('¡Actividad diaria actualizada!', 'exito');
       this.observacionActual = '';
     }).catch(err => {
       console.error(err);
@@ -333,8 +418,8 @@ export class App implements OnInit, OnDestroy {
     const datosActualizar: Partial<Registro> = {
       horaSalida: ahora.toLocaleTimeString('es-ES'),
       estado: 'Completado',
-      totalHoras: 'Jornada Finalizada',
-      reporteFinal: this.reporteFinalTexto.trim() || 'Jornada finalizada sin observaciones adicionales'
+      totalHoras: 'Jornada Concluida',
+      reporteFinal: this.reporteFinalTexto.trim() || 'Jornada finalizada sin observaciones adicionales.'
     };
 
     this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
@@ -349,6 +434,40 @@ export class App implements OnInit, OnDestroy {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
     });
+  }
+
+  // --- FILTROS Y REPORTES MENSUALES EXPORTABLES A EXCEL ---
+  get registrosDelMes(): Registro[] {
+    return this.registros.filter(r => {
+      const coincideMes = !r.mesAno || r.mesAno === this.mesFiltroReporte || r.fecha.includes(this.mesFiltroReporte);
+      return coincideMes;
+    });
+  }
+
+  exportarExcelMensual(): void {
+    const datos = this.registrosDelMes;
+    if (datos.length === 0) {
+      this.notificar('No hay datos en el mes seleccionado para exportar', 'alerta');
+      return;
+    }
+
+    let csvContent = "\uFEFF"; // BOM UTF-8 para compatibilidad en Excel
+    csvContent += "ID,Organización,Empleado,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Inicial / Ubicación,Reporte Diario Final\n";
+
+    datos.forEach(r => {
+      csvContent += `"${r.id || ''}","${this.empresa.nombre}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
+    });
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Reporte_Mensual_TickTock_${this.mesFiltroReporte}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    this.notificar('Reporte Excel / CSV descargado con éxito', 'exito');
   }
 
   get registrosFiltrados(): Registro[] {
@@ -380,23 +499,11 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
-  exportarCSV(): void {
-    if (this.registros.length === 0) {
-      this.notificar('No hay datos para exportar', 'alerta');
-      return;
-    }
-    let csv = "ID,Usuario,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Inicial,Reporte Final\n";
-    this.registros.forEach(r => {
-      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${r.observacion || ''}","${r.reporteFinal || ''}"\n`;
+  eliminarUsuario(id?: string): void {
+    if (!id) return;
+    this.registroService.eliminarUsuario(id).then(() => {
+      this.notificar('Usuario eliminado de la base de datos', 'info');
     });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Reporte_TickTock_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    this.notificar('Reporte CSV generado con éxito', 'exito');
   }
 
   iniciarReloj(): void {
@@ -419,6 +526,9 @@ export class App implements OnInit, OnDestroy {
     this.mensajeToast = mensaje;
     this.tipoToast = tipo;
     this.mostrarToast = true;
-    setTimeout(() => { this.mostrarToast = false; }, 3200);
+    setTimeout(() => { this.mostrarToast = false; }, 3500);
   }
+
+  abrirModalEmpresa(): void { this.mostrarModalEmpresa = true; }
+  cerrarModalEmpresa(): void { this.mostrarModalEmpresa = false; }
 }

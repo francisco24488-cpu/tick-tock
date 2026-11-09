@@ -18,6 +18,7 @@ export interface Usuario {
   departamento: string;
   avatar: string;
   puesto: string;
+  empresaNombre?: string;
 }
 
 export interface Registro {
@@ -27,6 +28,7 @@ export interface Registro {
   puesto: string;
   departamento: string;
   fecha: string;
+  mesAno?: string; // Corrije los errores de TypeScript en app.ts
   horaEntrada: string;
   horaSalida?: string;
   horaPausaInicio?: string;
@@ -65,6 +67,11 @@ export class RegistroService {
   }
 
   // --- COLECCIÓN FIRESTORE: 'usuarios' ---
+  getUsuarios(): Observable<Usuario[]> {
+    const usuariosRef = collection(this.firestore, 'usuarios');
+    return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
+  }
+
   async registrarUsuario(usuario: Usuario): Promise<any> {
     const usuariosRef = collection(this.firestore, 'usuarios');
     return addDoc(usuariosRef, usuario);
@@ -78,18 +85,17 @@ export class RegistroService {
       
       if (!querySnapshot.empty) {
         const docSnap = querySnapshot.docs[0];
-        const data = docSnap.data() as Usuario;
-        return { ...data, id: docSnap.id };
+        return { ...(docSnap.data() as Usuario), id: docSnap.id };
       }
       return null;
     } catch (e) {
-      console.error('Error buscando usuario en Firestore:', e);
+      console.error('Error al consultar usuarios en Firestore:', e);
       return null;
     }
   }
 
-  getUsuarios(): Observable<Usuario[]> {
-    const usuariosRef = collection(this.firestore, 'usuarios');
-    return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
+  eliminarUsuario(id: string) {
+    const usuarioDoc = doc(this.firestore, `usuarios/${id}`);
+    return deleteDoc(usuarioDoc);
   }
 }
