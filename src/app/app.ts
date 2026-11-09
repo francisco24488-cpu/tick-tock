@@ -19,22 +19,24 @@ export class App implements OnInit, OnDestroy {
   sesionIniciada: boolean = false;
 
   empresa: Empresa = { 
-    nombre: 'Plataforma TickTock', 
-    sucursal: 'Campus Central / Edificio D', 
-    codigo: 'TT-2026-GLOBAL', 
-    horario: '08:00 AM - 06:00 PM' 
+    nombre: 'Corporación TickTock', 
+    sucursal: 'Campus Principal', 
+    codigo: 'TT-2026', 
+    horario: '08:00 AM - 05:00 PM' 
   };
 
-  // Formularios de Autenticación Pública
+  // Campos de Registro Público
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
   formRol: 'estudiante' | 'admin' = 'estudiante';
   formDepartamento: string = 'General';
   formAvatar: string = '🧑‍💻';
-  formEmpresaNombre: string = 'Plataforma TickTock';
+  formEmpresaNombre: string = 'Corporación TickTock';
+  formSucursal: string = 'Campus Principal';
+  formHorario: string = '08:00 AM - 05:00 PM';
 
-  // Formulario para que el Administrador dé de alta a estudiantes
+  // Registro de Estudiantes por Admin
   mostrarModalNuevoEstudiante: boolean = false;
   adminNuevoNombre: string = '';
   adminNuevoCorreo: string = '';
@@ -48,7 +50,11 @@ export class App implements OnInit, OnDestroy {
   observacionActual: string = '';
   cargandoAccion: boolean = false;
 
-  // Modales adicionales
+  // Cronómetro de 10 minutos para actividad pendiente
+  tiempoRestanteActividad: number = 0; // segundos
+  cronometroTimerId: any = null;
+
+  // Modales
   mostrarModalSalida: boolean = false;
   mostrarModalEmpresa: boolean = false;
   reporteFinalTexto: string = '';
@@ -56,7 +62,7 @@ export class App implements OnInit, OnDestroy {
   // Filtros
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
-  mesFiltroReporte: string = new Date().toISOString().substring(0, 7); // Formato YYYY-MM
+  mesFiltroReporte: string = new Date().toISOString().substring(0, 7);
 
   // Reloj
   relojHora: string = '00:00:00';
@@ -84,6 +90,7 @@ export class App implements OnInit, OnDestroy {
     this.registroService.getRegistros().subscribe({
       next: (data: Registro[]) => {
         this.registros = data || [];
+        this.evaluarCronometroPendiente();
         this.cdr.detectChanges();
       },
       error: (err: any) => console.error('Error registros:', err)
@@ -100,6 +107,7 @@ export class App implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     if (this.timerId) clearInterval(this.timerId);
+    if (this.cronometroTimerId) clearInterval(this.cronometroTimerId);
   }
 
   irAAuth(tab: 'login' | 'registro'): void {
@@ -111,13 +119,12 @@ export class App implements OnInit, OnDestroy {
     this.pantallaActual = 'bienvenida';
   }
 
-  // --- SELECCIÓN RÁPIDA EN MODO KIOSK ---
   seleccionarUsuarioDirecto(usuario: Usuario): void {
     this.iniciarSesionUsuario(usuario);
     this.notificar(`Acceso rápido: ${usuario.nombre}`, 'exito');
   }
 
-  // --- FUNCIONALIDAD: EL ADMINISTRADOR REGISTRA A SUS ALUMNOS ---
+  // --- ALTA DE ESTUDIANTES POR ADMINISTRADOR ---
   abrirModalNuevoEstudiante(): void {
     this.adminNuevoNombre = '';
     this.adminNuevoCorreo = '';
@@ -133,19 +140,18 @@ export class App implements OnInit, OnDestroy {
 
   async registrarEstudiantePorAdmin(): Promise<void> {
     if (!this.adminNuevoNombre.trim() || !this.adminNuevoCorreo.trim() || !this.adminNuevoPassword.trim()) {
-      this.notificar('Por favor completa el nombre, correo y contraseña del estudiante', 'alerta');
+      this.notificar('Por favor ingresa nombre, correo y contraseña del estudiante', 'alerta');
       return;
     }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
-
-    const correoNormalizado = this.adminNuevoCorreo.trim().toLowerCase();
+    const correoNorm = this.adminNuevoCorreo.trim().toLowerCase();
 
     try {
-      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNormalizado);
+      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
       if (existe) {
-        this.notificar('Este correo ya está registrado en la base de datos', 'alerta');
+        this.notificar('Este correo ya está registrado en el sistema', 'alerta');
         this.cargandoAccion = false;
         this.cdr.detectChanges();
         return;
@@ -153,21 +159,23 @@ export class App implements OnInit, OnDestroy {
 
       const nuevoEstudiante: Usuario = {
         nombre: this.adminNuevoNombre.trim(),
-        correo: correoNormalizado,
+        correo: correoNorm,
         password: this.adminNuevoPassword.trim(),
         rol: 'estudiante',
         departamento: this.adminNuevoDept,
         avatar: this.adminNuevoAvatar,
         puesto: 'Estudiante / Colaborador',
-        empresaNombre: this.empresa.nombre
+        empresaNombre: this.empresa.nombre,
+        sucursal: this.empresa.sucursal,
+        horario: this.empresa.horario
       };
 
       await this.registroService.registrarUsuario(nuevoEstudiante);
-      this.notificar(`¡Estudiante ${nuevoEstudiante.nombre} registrado con éxito en Firestore!`, 'exito');
+      this.notificar(`¡Estudiante ${nuevoEstudiante.nombre} guardado correctamente!`, 'exito');
       this.mostrarModalNuevoEstudiante = false;
     } catch (error) {
       console.error(error);
-      this.notificar('Error al guardar el nuevo estudiante', 'alerta');
+      this.notificar('Error al guardar el estudiante', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -176,19 +184,18 @@ export class App implements OnInit, OnDestroy {
 
   async ejecutarRegistro(): Promise<void> {
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
-      this.notificar('Por favor completa todos los campos requeridos', 'alerta');
+      this.notificar('Completa los campos requeridos', 'alerta');
       return;
     }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
-
-    const correoNormalizado = this.formCorreo.trim().toLowerCase();
+    const correoNorm = this.formCorreo.trim().toLowerCase();
 
     try {
-      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNormalizado);
+      const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
       if (existe) {
-        this.notificar('Este correo ya está registrado', 'alerta');
+        this.notificar('Este correo ya existe en la plataforma', 'alerta');
         this.cargandoAccion = false;
         this.cdr.detectChanges();
         return;
@@ -196,24 +203,26 @@ export class App implements OnInit, OnDestroy {
 
       const nuevoUsuario: Usuario = {
         nombre: this.formNombre.trim(),
-        correo: correoNormalizado,
+        correo: correoNorm,
         password: this.formPassword.trim(),
         rol: this.formRol,
         departamento: this.formDepartamento,
         avatar: this.formAvatar,
         puesto: this.formRol === 'admin' ? 'Administrador General' : 'Estudiante / Colaborador',
-        empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre
+        empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre,
+        sucursal: this.formSucursal.trim() || this.empresa.sucursal,
+        horario: this.formHorario.trim() || this.empresa.horario
       };
 
       const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
       nuevoUsuario.id = docRef.id;
 
       this.iniciarSesionUsuario(nuevoUsuario);
-      this.notificar(`¡Cuenta creada e iniciada! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
+      this.notificar(`¡Cuenta creada! Bienvenido, ${nuevoUsuario.nombre}`, 'exito');
       this.limpiarFormularioAuth();
     } catch (error) {
       console.error(error);
-      this.notificar('Error de conexión con la base de datos', 'alerta');
+      this.notificar('Error al registrar usuario', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -228,7 +237,6 @@ export class App implements OnInit, OnDestroy {
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
-
     const correoBuscado = this.formCorreo.trim().toLowerCase();
     const passBuscada = this.formPassword.trim();
 
@@ -240,14 +248,14 @@ export class App implements OnInit, OnDestroy {
 
       if (usuario && usuario.password === passBuscada) {
         this.iniciarSesionUsuario(usuario);
-        this.notificar(`Bienvenido de nuevo, ${usuario.nombre}`, 'exito');
+        this.notificar(`Bienvenido, ${usuario.nombre}`, 'exito');
         this.limpiarFormularioAuth();
       } else {
-        this.notificar('Correo o contraseña incorrectos', 'alerta');
+        this.notificar('Credenciales incorrectas', 'alerta');
       }
     } catch (error) {
       console.error(error);
-      this.notificar('Error de autenticación', 'alerta');
+      this.notificar('Error al iniciar sesión', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -258,9 +266,9 @@ export class App implements OnInit, OnDestroy {
     this.usuarioActual = { ...usuario };
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
-    if (usuario.empresaNombre) {
-      this.empresa.nombre = usuario.empresaNombre;
-    }
+    if (usuario.empresaNombre) this.empresa.nombre = usuario.empresaNombre;
+    if (usuario.sucursal) this.empresa.sucursal = usuario.sucursal;
+    if (usuario.horario) this.empresa.horario = usuario.horario;
     localStorage.setItem('ticktock_user', JSON.stringify(this.usuarioActual));
   }
 
@@ -281,9 +289,9 @@ export class App implements OnInit, OnDestroy {
           this.usuarioActual = user;
           this.sesionIniciada = true;
           this.pantallaActual = 'dashboard';
-          if (user.empresaNombre) {
-            this.empresa.nombre = user.empresaNombre;
-          }
+          if (user.empresaNombre) this.empresa.nombre = user.empresaNombre;
+          if (user.sucursal) this.empresa.sucursal = user.sucursal;
+          if (user.horario) this.empresa.horario = user.horario;
         }
       } catch (e) {
         localStorage.removeItem('ticktock_user');
@@ -297,7 +305,7 @@ export class App implements OnInit, OnDestroy {
     this.formPassword = '';
   }
 
-  // --- REGISTRO DIARIO Y REPORTES ---
+  // --- MARCAJE DE ENTRADA Y CRONÓMETRO DE 10 MINUTOS ---
   get registroActivo(): Registro | undefined {
     if (!this.usuarioActual) return undefined;
     const userId = String(this.usuarioActual.id || this.usuarioActual.correo);
@@ -313,15 +321,12 @@ export class App implements OnInit, OnDestroy {
   marcarEntrada(): void {
     if (!this.usuarioActual) return;
 
-    if (!this.observacionActual.trim()) {
-      this.notificar('⚠️ La actividad u objetivo del día es OBLIGATORIA para iniciar turno', 'alerta');
-      return;
-    }
-
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const ahora = new Date();
     const mesAno = ahora.toISOString().substring(0, 7);
+
+    const textoActividad = this.observacionActual.trim() || 'Pendiente de registrar (Tiempo límite: 10 min)';
 
     const nuevo: Registro = {
       empleadoId: String(this.usuarioActual.id || this.usuarioActual.correo),
@@ -332,12 +337,14 @@ export class App implements OnInit, OnDestroy {
       mesAno: mesAno,
       horaEntrada: ahora.toLocaleTimeString('es-ES'),
       estado: 'En Turno',
-      observacion: this.observacionActual.trim()
+      observacion: textoActividad,
+      timestampEntrada: ahora.getTime()
     };
 
     this.registroService.agregarRegistro(nuevo).then(() => {
-      this.notificar(`Entrada guardada en Firestore a las ${nuevo.horaEntrada}`, 'exito');
+      this.notificar(`🟢 Entrada registrada a las ${nuevo.horaEntrada}`, 'exito');
       this.observacionActual = '';
+      this.iniciarCronometro10Min(600); // 10 minutos = 600 segs
     }).catch(err => {
       console.error(err);
       this.notificar('Error al guardar marcaje', 'alerta');
@@ -355,7 +362,7 @@ export class App implements OnInit, OnDestroy {
     }
 
     if (!this.observacionActual.trim()) {
-      this.notificar('Escribe la nueva actividad o ubicación para actualizar', 'alerta');
+      this.notificar('Escribe la actividad realizada para actualizar', 'alerta');
       return;
     }
 
@@ -363,15 +370,56 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
 
     this.registroService.actualizarRegistro(reg.id, { observacion: this.observacionActual.trim() }).then(() => {
-      this.notificar('¡Actividad diaria actualizada!', 'exito');
+      this.notificar('✅ ¡Actividad registrada con éxito!', 'exito');
       this.observacionActual = '';
+      this.detenerCronometro();
     }).catch(err => {
       console.error(err);
-      this.notificar('Error al actualizar la actividad', 'alerta');
+      this.notificar('Error al actualizar actividad', 'alerta');
     }).finally(() => {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
     });
+  }
+
+  iniciarCronometro10Min(segundosIniciales: number): void {
+    if (this.cronometroTimerId) clearInterval(this.cronometroTimerId);
+    this.tiempoRestanteActividad = segundosIniciales;
+
+    this.cronometroTimerId = setInterval(() => {
+      if (this.tiempoRestanteActividad > 0) {
+        this.tiempoRestanteActividad--;
+        this.cdr.detectChanges();
+      } else {
+        this.detenerCronometro();
+        this.notificar('⚠️ El tiempo de 10 minutos para registrar tu actividad ha expirado.', 'alerta');
+      }
+    }, 1000);
+  }
+
+  detenerCronometro(): void {
+    if (this.cronometroTimerId) {
+      clearInterval(this.cronometroTimerId);
+      this.cronometroTimerId = null;
+    }
+    this.tiempoRestanteActividad = 0;
+  }
+
+  evaluarCronometroPendiente(): void {
+    const reg = this.registroActivo;
+    if (reg && reg.timestampEntrada && reg.observacion.includes('Pendiente')) {
+      const transcurridoSegs = Math.floor((new Date().getTime() - reg.timestampEntrada) / 1000);
+      const restante = 600 - transcurridoSegs;
+      if (restante > 0) {
+        this.iniciarCronometro10Min(restante);
+      }
+    }
+  }
+
+  get cronometroFormateado(): string {
+    const mins = Math.floor(this.tiempoRestanteActividad / 60).toString().padStart(2, '0');
+    const segs = (this.tiempoRestanteActividad % 60).toString().padStart(2, '0');
+    return `${mins}:${segs}`;
   }
 
   conmutarPausa(): void {
@@ -419,55 +467,74 @@ export class App implements OnInit, OnDestroy {
       horaSalida: ahora.toLocaleTimeString('es-ES'),
       estado: 'Completado',
       totalHoras: 'Jornada Concluida',
-      reporteFinal: this.reporteFinalTexto.trim() || 'Jornada finalizada sin observaciones adicionales.'
+      reporteFinal: this.reporteFinalTexto.trim() || 'Turno finalizado sin observaciones.'
     };
 
     this.registroService.actualizarRegistro(reg.id, datosActualizar).then(() => {
-      this.notificar(`Salida registrada a las ${datosActualizar.horaSalida}`, 'exito');
+      this.notificar(`🔴 Salida registrada a las ${datosActualizar.horaSalida}`, 'exito');
+      this.detenerCronometro();
       this.mostrarModalSalida = false;
       this.observacionActual = '';
       this.reporteFinalTexto = '';
     }).catch(err => {
       console.error(err);
-      this.notificar('Error al guardar la salida', 'alerta');
+      this.notificar('Error al guardar salida', 'alerta');
     }).finally(() => {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
     });
   }
 
-  // --- FILTROS Y REPORTES MENSUALES EXPORTABLES A EXCEL ---
-  get registrosDelMes(): Registro[] {
-    return this.registros.filter(r => {
-      const coincideMes = !r.mesAno || r.mesAno === this.mesFiltroReporte || r.fecha.includes(this.mesFiltroReporte);
-      return coincideMes;
-    });
-  }
-
-  exportarExcelMensual(): void {
-    const datos = this.registrosDelMes;
-    if (datos.length === 0) {
-      this.notificar('No hay datos en el mes seleccionado para exportar', 'alerta');
+  // --- TRES MODALIDADES DE EXPORTACIÓN EN CSV / EXCEL ---
+  exportarSoloHoras(): void {
+    if (this.registros.length === 0) {
+      this.notificar('No hay registros de tiempo para exportar', 'alerta');
       return;
     }
-
-    let csvContent = "\uFEFF"; // BOM UTF-8 para compatibilidad en Excel
-    csvContent += "ID,Organización,Empleado,Puesto,Departamento,Fecha,Hora Entrada,Hora Salida,Estado,Actividad Inicial / Ubicación,Reporte Diario Final\n";
-
-    datos.forEach(r => {
-      csvContent += `"${r.id || ''}","${this.empresa.nombre}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaSalida || ''}","${r.estado}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
+    let csv = "\uFEFFID,Estudiante / Empleado,Departamento,Fecha,Hora Entrada,Hora Pausa,Hora Salida,Estado\n";
+    this.registrosFiltrados.forEach(r => {
+      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaPausaInicio || '--'}","${r.horaSalida || 'En turno'}","${r.estado}"\n`;
     });
+    this.descargarArchivoCSV(csv, `Reporte_Horas_TickTock_${this.mesFiltroReporte}.csv`);
+    this.notificar('📊 Reporte de Horas descargado con éxito', 'exito');
+  }
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  exportarSoloActividades(): void {
+    if (this.registros.length === 0) {
+      this.notificar('No hay informes o actividades para exportar', 'alerta');
+      return;
+    }
+    let csv = "\uFEFFID,Estudiante / Empleado,Departamento,Fecha,Actividad Inicial / Ubicación,Reporte Diario Final\n";
+    this.registrosFiltrados.forEach(r => {
+      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
+    });
+    this.descargarArchivoCSV(csv, `Reporte_Actividades_TickTock_${this.mesFiltroReporte}.csv`);
+    this.notificar('📝 Reporte de Actividades descargado con éxito', 'exito');
+  }
+
+  exportarReporteCompleto(): void {
+    if (this.registros.length === 0) {
+      this.notificar('No hay datos para exportar', 'alerta');
+      return;
+    }
+    let csv = "\uFEFFID,Empresa,Estudiante / Empleado,Puesto,Departamento,Fecha,Hora Entrada,Hora Pausa,Hora Salida,Estado,Actividad Inicial / Ubicación,Reporte Diario Final\n";
+    this.registrosFiltrados.forEach(r => {
+      csv += `"${r.id || ''}","${this.empresa.nombre}","${r.empleadoNombre}","${r.puesto}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaPausaInicio || '--'}","${r.horaSalida || 'En turno'}","${r.estado}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
+    });
+    this.descargarArchivoCSV(csv, `Reporte_Completo_TickTock_${this.mesFiltroReporte}.csv`);
+    this.notificar('📂 Reporte Completo descargado con éxito', 'exito');
+  }
+
+  private descargarArchivoCSV(contenido: string, nombreArchivo: string): void {
+    const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `Reporte_Mensual_TickTock_${this.mesFiltroReporte}.csv`);
+    link.href = url;
+    link.download = nombreArchivo;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    this.notificar('Reporte Excel / CSV descargado con éxito', 'exito');
   }
 
   get registrosFiltrados(): Registro[] {
@@ -495,14 +562,14 @@ export class App implements OnInit, OnDestroy {
   eliminarRegistro(id?: string): void {
     if (!id) return;
     this.registroService.eliminarRegistro(id).then(() => {
-      this.notificar('Registro eliminado de Firestore', 'info');
+      this.notificar('Registro eliminado', 'info');
     });
   }
 
   eliminarUsuario(id?: string): void {
     if (!id) return;
     this.registroService.eliminarUsuario(id).then(() => {
-      this.notificar('Usuario eliminado de la base de datos', 'info');
+      this.notificar('Usuario eliminado', 'info');
     });
   }
 

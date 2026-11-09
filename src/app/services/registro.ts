@@ -19,6 +19,8 @@ export interface Usuario {
   avatar: string;
   puesto: string;
   empresaNombre?: string;
+  sucursal?: string;
+  horario?: string;
 }
 
 export interface Registro {
@@ -28,7 +30,7 @@ export interface Registro {
   puesto: string;
   departamento: string;
   fecha: string;
-  mesAno?: string; // Corrije los errores de TypeScript en app.ts
+  mesAno?: string;
   horaEntrada: string;
   horaSalida?: string;
   horaPausaInicio?: string;
@@ -37,6 +39,7 @@ export interface Registro {
   estado: 'En Turno' | 'En Pausa' | 'Completado';
   observacion: string;
   reporteFinal?: string;
+  timestampEntrada?: number;
 }
 
 @Injectable({
@@ -45,7 +48,7 @@ export interface Registro {
 export class RegistroService {
   constructor(private firestore: Firestore) {}
 
-  // --- COLECCIÓN FIRESTORE: 'registros' ---
+  // --- REGISTROS DE TIEMPO ---
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
@@ -66,7 +69,7 @@ export class RegistroService {
     return deleteDoc(registroDoc);
   }
 
-  // --- COLECCIÓN FIRESTORE: 'usuarios' ---
+  // --- USUARIOS ---
   getUsuarios(): Observable<Usuario[]> {
     const usuariosRef = collection(this.firestore, 'usuarios');
     return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
