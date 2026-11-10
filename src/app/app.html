@@ -263,30 +263,28 @@
       <section class="card kiosk-card" *ngIf="usuarioActual.rol === 'estudiante'">
         <div class="card-header-emerald">
           <h2>⏱️ Panel de Registro de Asistencia</h2>
-          <p>Marca tu entrada y registra tu actividad del día dentro de la barra flotante:</p>
+          <p>Marca tu entrada y registra tu actividad dentro del contenedor acoplado:</p>
         </div>
 
-        <!-- ALERTA DE CRONÓMETRO DE 10 MINUTOS SI HAY ACTIVIDAD PENDIENTE -->
         <div class="timer-warning-banner" *ngIf="tiempoRestanteActividad > 0">
           <span class="timer-icon">⏳</span>
           <div>
-            <strong>CRONÓMETRO DE ACTIVIDAD (10 MINUTOS DE GRACIA):</strong>
-            <span>Tienes <strong>{{ cronometroFormateado }}</strong> para redactar tu actividad y hacer clic en <em>"Guardar Actividad"</em>.</span>
+            <strong>TIEMPO RESTANTE PARA REGISTRAR ACTIVIDAD:</strong>
+            <span>Cuentas con <strong>{{ cronometroFormateado }}</strong> para escribir tu actividad y hacer clic en <em>"Guardar Actividad"</em>.</span>
           </div>
         </div>
 
-        <!-- BARRA INTEGRADA: ACTIVIDAD DIRECTAMENTE PEGADA AL BOTÓN DE MARCAJE -->
+        <!-- CONTENEDOR ACOPLADO DE ACTIVIDAD Y ACCIONES -->
         <div class="action-dock-container">
           <div class="activity-input-dock">
-            <label><strong>📝 Actividad / Objetivo de tu Jornada:</strong></label>
+            <label><strong>📝 Actividad / Objetivo de la Jornada:</strong></label>
             <input 
               type="text" 
               class="input-emerald-dock" 
               [(ngModel)]="observacionActual" 
-              placeholder="Ej: Desarrollo del módulo de asistencia, revisión con equipo, soporte técnico...">
+              placeholder="Ej: Desarrollo de módulos, práctica en laboratorio, atención a usuarios...">
           </div>
 
-          <!-- BOTONES DE ACCIÓN DIRECTA -->
           <div class="kiosk-buttons-grid">
             <button 
               type="button"
@@ -309,7 +307,7 @@
               <span class="kiosk-icon">💾</span>
               <div>
                 <strong>GUARDAR ACTIVIDAD</strong>
-                <small>Actualizar en Tiempo Real</small>
+                <small>Actualizar en Vivo</small>
               </div>
             </button>
 
@@ -339,7 +337,6 @@
           </div>
         </div>
 
-        <!-- Indicador de Estado Actual -->
         <div class="status-card-box margin-top">
           <div class="user-meta">
             <div class="user-avatar">{{ usuarioActual.avatar }}</div>
@@ -355,7 +352,6 @@
           </div>
         </div>
 
-        <!-- Tabla Personal de Marcajes -->
         <div class="margin-top-2">
           <h3>📋 Mis Marcajes de Asistencia</h3>
           <table class="emerald-table margin-top">
@@ -409,7 +405,6 @@
           </div>
         </div>
 
-        <!-- DIRECTORIO DE ESTUDIANTES -->
         <div class="table-header-bar margin-top-2">
           <h3>👥 Directorio de Estudiantes Registrados</h3>
           <button class="btn-confirm-emerald" (click)="abrirModalNuevoEstudiante()">
@@ -440,7 +435,6 @@
           </table>
         </div>
 
-        <!-- BITÁCORA GENERAL DE ASISTENCIA Y 3 OPCIONES DE EXPORTACIÓN -->
         <div class="table-header-bar margin-top-2">
           <div>
             <h3>📊 Bitácora General de Asistencia y Reportes</h3>

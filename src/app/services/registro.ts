@@ -48,7 +48,6 @@ export interface Registro {
 export class RegistroService {
   constructor(private firestore: Firestore) {}
 
-  // --- REGISTROS DE TIEMPO ---
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
@@ -69,7 +68,6 @@ export class RegistroService {
     return deleteDoc(registroDoc);
   }
 
-  // --- USUARIOS ---
   getUsuarios(): Observable<Usuario[]> {
     const usuariosRef = collection(this.firestore, 'usuarios');
     return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
