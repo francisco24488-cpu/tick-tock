@@ -71,7 +71,7 @@ export class App implements OnInit, OnDestroy {
   private mediaStream: MediaStream | null = null;
   private scanLoopId: any = null;
 
-  // --- LOS 3 CRONÓMETROS EN VIVO (SEGUNDOS RESTANTES) ---
+  // Los 3 Cronómetros en Vivo
   tiempoRestanteQR: number = 0;         // 15 min (900s) para escanear QR
   tiempoRestanteActividad: number = 0;  // 10 min (600s) para registrar actividad
   tiempoRestantePausa: number = 0;      // Minutos configurados para comida
@@ -88,6 +88,8 @@ export class App implements OnInit, OnDestroy {
   mostrarModalEmpresa: boolean = false;
   reporteFinalTexto: string = '';
 
+  // Filtros Admin
+  busquedaAlumnoAdmin: string = '';
   busquedaEmpleado: string = '';
   filtroEstado: string = 'TODOS';
   mesFiltroReporte: string = new Date().toISOString().substring(0, 7);
@@ -109,10 +111,14 @@ export class App implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.cargarLibreriaQR();
+    this.cargarLibreriasQR();
     this.cargarSesionGuardada();
     this.iniciarRelojYCronometros();
 
+    // Carga inicial directa desde Firestore para evitar demoras
+    this.recargarDatosDesdeNube(false);
+
+    // Suscripciones en tiempo real
     this.registroService.getEmpresaConfig().subscribe({
       next: (cfg) => {
         if (cfg) {
@@ -154,13 +160,44 @@ export class App implements OnInit, OnDestroy {
     this.detenerCamara();
   }
 
-  private cargarLibreriaQR(): void {
+  async recargarDatosDesdeNube(mostrarAviso: boolean = true): Promise<void> {
+    try {
+      const [usuarios, registros, qrKiosco] = await Promise.all([
+        this.registroService.obtenerUsuariosDirecto(),
+        this.registroService.obtenerRegistrosDirecto(),
+        this.registroService.obtenerQrKioscoDirecto()
+      ]);
+
+      if (usuarios.length > 0) this.usuariosSistema = usuarios;
+      if (registros.length > 0) {
+        this.registros = registros.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
+      }
+      if (qrKiosco) this.qrKioscoActivo = qrKiosco;
+
+      this.recalcularCronometros();
+      this.cdr.detectChanges();
+      if (mostrarAviso) {
+        this.notificar(`🔄 Datos sincronizados (${this.totalEstudiantes} alumnos registrados)`, 'info');
+      }
+    } catch (e) {
+      console.error('Error sincronizando datos:', e);
+    }
+  }
+
+  private cargarLibreriasQR(): void {
     if (!(window as any).jsQR && !document.getElementById('jsqr-script')) {
       const script = document.createElement('script');
       script.id = 'jsqr-script';
       script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
       script.async = true;
       document.head.appendChild(script);
+    }
+    if (!(window as any).QRCode && !document.getElementById('qrcode-gen-script')) {
+      const scriptGen = document.createElement('script');
+      scriptGen.id = 'qrcode-gen-script';
+      scriptGen.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+      scriptGen.async = true;
+      document.head.appendChild(scriptGen);
     }
   }
 
@@ -256,7 +293,7 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- GESTIÓN DE ESTUDIANTES (ADMIN) ---
+  // --- GESTIÓN DE ALUMNOS (ADMIN) ---
   abrirModalNuevoEstudiante(): void {
     this.adminNuevoNombre = '';
     this.adminNuevoCorreo = '';
@@ -306,12 +343,15 @@ export class App implements OnInit, OnDestroy {
         matricula: this.adminNuevoMatricula.trim()
       };
 
-      await this.registroService.registrarUsuario(nuevoEstudiante);
-      this.notificar(`✅ Estudiante ${nuevoEstudiante.nombre} registrado correctamente`, 'exito');
+      const docRef = await this.registroService.registrarUsuario(nuevoEstudiante);
+      nuevoEstudiante.id = docRef.id;
+      this.usuariosSistema = [...this.usuariosSistema, nuevoEstudiante];
+
+      this.notificar(`✅ Alumno ${nuevoEstudiante.nombre} registrado correctamente`, 'exito');
       this.mostrarModalNuevoEstudiante = false;
     } catch (error) {
       console.error(error);
-      this.notificar('Error al guardar estudiante en Firebase', 'alerta');
+      this.notificar('Error al guardar alumno en Firebase', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -361,6 +401,7 @@ export class App implements OnInit, OnDestroy {
 
       const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
       nuevoUsuario.id = docRef.id;
+      this.usuariosSistema = [...this.usuariosSistema, nuevoUsuario];
 
       this.iniciarSesionUsuario(nuevoUsuario);
       this.notificar('¡Cuenta creada correctamente!', 'exito');
@@ -393,6 +434,7 @@ export class App implements OnInit, OnDestroy {
 
       if (usuario && usuario.password === passBuscada) {
         this.iniciarSesionUsuario(usuario);
+        await this.recargarDatosDesdeNube(false);
         this.notificar(`Bienvenido, ${usuario.nombre}`, 'exito');
         this.limpiarFormularioAuth();
       } else {
@@ -447,7 +489,7 @@ export class App implements OnInit, OnDestroy {
     this.formPassword = '';
   }
 
-  // --- CONFIGURACIÓN DE EMPRESA PERSISTENTE ---
+  // --- CONFIGURACIÓN DE EMPRESA ---
   abrirModalEmpresa(): void {
     this.mostrarModalEmpresa = true;
     this.cdr.detectChanges();
@@ -499,7 +541,15 @@ export class App implements OnInit, OnDestroy {
     const encontrado = this.registros.find(
       r => r.id && !r.id.startsWith('temp_') && r.timestampEntrada === reg.timestampEntrada
     );
-    return encontrado?.id || null;
+    if (encontrado?.id) return encontrado.id;
+
+    // Buscar directamente en Firestore si aún no llega por suscripción
+    const frescos = await this.registroService.obtenerRegistrosDirecto();
+    const match = frescos.find(
+      r => r.timestampEntrada === reg.timestampEntrada ||
+           (r.codigoQR && r.codigoQR === reg.codigoQR && r.estado !== 'Completado')
+    );
+    return match?.id || null;
   }
 
   // --- GENERAR QR DESDE LA COMPUTADORA DEL ENCARGADO (KIOSCO) ---
@@ -513,7 +563,7 @@ export class App implements OnInit, OnDestroy {
     };
 
     this.qrKioscoActivo = qrData;
-    this.mostrarQRConTemporizador(pin, ahora);
+    await this.mostrarQRConTemporizador(pin, ahora);
     try {
       await this.registroService.guardarQrKiosco(qrData);
       this.notificar('🖥️ Código QR generado en pantalla (válido por 15 min)', 'exito');
@@ -560,7 +610,7 @@ export class App implements OnInit, OnDestroy {
 
     this.registros = [nuevo, ...this.registros];
     this.observacionActual = '';
-    this.mostrarQRConTemporizador(pin, ahoraMs);
+    await this.mostrarQRConTemporizador(pin, ahoraMs);
     this.recalcularCronometros();
     this.notificar('🟢 Entrada iniciada. Escanea el QR antes de 15 min.', 'exito');
 
@@ -576,16 +626,33 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  verMiQRDeNuevo(): void {
+  async verMiQRDeNuevo(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg || !reg.codigoQR) return;
-    this.mostrarQRConTemporizador(reg.codigoQR, reg.timestampQR || reg.timestampEntrada || Date.now());
+    await this.mostrarQRConTemporizador(reg.codigoQR, reg.timestampQR || reg.timestampEntrada || Date.now());
   }
 
-  private mostrarQRConTemporizador(pin: string, timestampCreacion: number): void {
+  private async mostrarQRConTemporizador(pin: string, timestampCreacion: number): Promise<void> {
     this.codigoGeneradoQR = pin;
     this.timestampQRGenerado = timestampCreacion;
-    this.qrImagenUrl = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(pin)}`;
+
+    // Generar QR localmente en alta resolución si la librería ya cargó; si no, usar API
+    const QRCodeLib = (window as any).QRCode;
+    if (QRCodeLib && typeof QRCodeLib.toDataURL === 'function') {
+      try {
+        this.qrImagenUrl = await QRCodeLib.toDataURL(pin, {
+          width: 320,
+          margin: 3,
+          errorCorrectionLevel: 'H',
+          color: { dark: '#000000', light: '#ffffff' }
+        });
+      } catch {
+        this.qrImagenUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&ecc=H&margin=16&data=${encodeURIComponent(pin)}`;
+      }
+    } else {
+      this.qrImagenUrl = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&ecc=H&margin=16&data=${encodeURIComponent(pin)}`;
+    }
+
     this.mostrarModalQR = true;
     this.recalcularCronometros();
     this.cdr.detectChanges();
@@ -596,14 +663,20 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- ESCÁNER CON CÁMARA REAL + VALIDACIÓN ---
+  // --- ESCÁNER CON CÁMARA REAL + VALIDACIÓN DIRECTA EN FIREBASE ---
+  onInputCodigoManual(event: Event): void {
+    const val = (event.target as HTMLInputElement).value;
+    this.codigoEscaneadoManual = val;
+    this.errorModalEscaner = '';
+  }
+
   async abrirEscanerCamara(): Promise<void> {
     this.codigoEscaneadoManual = '';
     this.errorModalEscaner = '';
     this.validandoQR = false;
     this.mostrarModalCamaraMovil = true;
     this.escaneandoCamara = true;
-    this.estadoCamaraTexto = 'Solicitando permiso de cámara...';
+    this.estadoCamaraTexto = 'Solicitando acceso a la cámara...';
     this.cdr.detectChanges();
 
     try {
@@ -622,31 +695,33 @@ export class App implements OnInit, OnDestroy {
             videoElem.srcObject = this.mediaStream;
             videoElem.setAttribute('playsinline', 'true');
             videoElem.play().then(() => {
-              this.estadoCamaraTexto = 'Apunta directo al código QR de la pantalla...';
+              this.estadoCamaraTexto = 'Centra el código QR dentro del recuadro verde...';
               this.cdr.detectChanges();
               this.iniciarDeteccionQR(videoElem);
             }).catch(() => {
-              this.estadoCamaraTexto = 'Cámara lista. Si no detecta automático, escribe el PIN abajo.';
+              this.estadoCamaraTexto = 'Cámara activa. Si no lee automático, escribe los 6 dígitos abajo.';
               this.cdr.detectChanges();
             });
           }
         }, 250);
       } else {
-        this.estadoCamaraTexto = 'Tu navegador no permite cámara directa. Escribe el PIN de la pantalla abajo.';
+        this.estadoCamaraTexto = 'Cámara no disponible en este navegador. Escribe los 6 dígitos abajo.';
         this.cdr.detectChanges();
       }
     } catch (e) {
       console.warn('No se pudo abrir la cámara:', e);
-      this.estadoCamaraTexto = 'Cámara bloqueada o sin permiso. Escribe el PIN de la computadora abajo.';
+      this.estadoCamaraTexto = 'Sin permiso de cámara. Escribe el PIN de la computadora abajo.';
       this.cdr.detectChanges();
     }
   }
 
   private iniciarDeteccionQR(videoElem: HTMLVideoElement): void {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const canvasFull = document.createElement('canvas');
+    const ctxFull = canvasFull.getContext('2d', { willReadFrequently: true });
 
-    // Motor nativo BarcodeDetector (Chrome Android / Desktop)
+    const canvasCrop = document.createElement('canvas');
+    const ctxCrop = canvasCrop.getContext('2d', { willReadFrequently: true });
+
     const BarcodeDetectorClass = (window as any).BarcodeDetector;
     const detectorNativo = BarcodeDetectorClass
       ? new BarcodeDetectorClass({ formats: ['qr_code'] })
@@ -659,7 +734,7 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // 1. Intentar primero con BarcodeDetector nativo
+      // 1. Motor nativo del teléfono (Android Chrome / Edge)
       if (detectorNativo) {
         try {
           const barcodes = await detectorNativo.detect(videoElem);
@@ -673,31 +748,50 @@ export class App implements OnInit, OnDestroy {
             }
           }
         } catch {
-          // Continuar con jsQR
+          // Seguir con jsQR
         }
       }
 
-      // 2. Fallback con jsQR
+      // 2. Motor jsQR (iOS Safari + cualquier navegador) sobre recorte central y cuadro completo
       const jsQRFunc = (window as any).jsQR;
-      if (jsQRFunc && ctx && videoElem.videoWidth > 0) {
-        canvas.width = videoElem.videoWidth;
-        canvas.height = videoElem.videoHeight;
-        ctx.drawImage(videoElem, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const qrDetectado = jsQRFunc(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth'
-        });
+      if (jsQRFunc && ctxFull && ctxCrop && videoElem.videoWidth > 0) {
+        const vw = videoElem.videoWidth;
+        const vh = videoElem.videoHeight;
 
-        if (qrDetectado && qrDetectado.data) {
-          const valor = String(qrDetectado.data).trim().toUpperCase();
-          if (valor) {
-            this.codigoEscaneadoManual = valor;
-            this.cdr.detectChanges();
-            await this.validarCodigoEscaner();
-          }
+        // A) Recorte central (60% del centro donde apunta el cuadro guía)
+        const cropSize = Math.floor(Math.min(vw, vh) * 0.65);
+        const sx = Math.floor((vw - cropSize) / 2);
+        const sy = Math.floor((vh - cropSize) / 2);
+        canvasCrop.width = 420;
+        canvasCrop.height = 420;
+        ctxCrop.drawImage(videoElem, sx, sy, cropSize, cropSize, 0, 0, 420, 420);
+
+        const imgCrop = ctxCrop.getImageData(0, 0, 420, 420);
+        const resCrop = jsQRFunc(imgCrop.data, 420, 420, { inversionAttempts: 'attemptBoth' });
+        if (resCrop && resCrop.data) {
+          this.codigoEscaneadoManual = String(resCrop.data).trim().toUpperCase();
+          this.cdr.detectChanges();
+          await this.validarCodigoEscaner();
+          return;
+        }
+
+        // B) Cuadro completo reducido a 640px
+        const scale = Math.min(1, 640 / vw);
+        const fw = Math.floor(vw * scale);
+        const fh = Math.floor(vh * scale);
+        canvasFull.width = fw;
+        canvasFull.height = fh;
+        ctxFull.drawImage(videoElem, 0, 0, fw, fh);
+
+        const imgFull = ctxFull.getImageData(0, 0, fw, fh);
+        const resFull = jsQRFunc(imgFull.data, fw, fh, { inversionAttempts: 'attemptBoth' });
+        if (resFull && resFull.data) {
+          this.codigoEscaneadoManual = String(resFull.data).trim().toUpperCase();
+          this.cdr.detectChanges();
+          await this.validarCodigoEscaner();
         }
       }
-    }, 220);
+    }, 200);
   }
 
   detenerCamara(): void {
@@ -715,21 +809,21 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  private normalizarPin(valor?: string): string {
+  private extraerSoloDigitosOPin(valor?: string): string {
     if (!valor) return '';
-    return valor.trim().toUpperCase().replace(/^TK-/, '').replace(/\s+/g, '');
+    return valor.trim().toUpperCase().replace(/^TK-?/i, '').replace(/[^A-Z0-9]/g, '');
   }
 
   async validarCodigoEscaner(): Promise<void> {
     if (this.validandoQR) return;
     this.errorModalEscaner = '';
 
-    const rawInput = this.codigoEscaneadoManual.trim().toUpperCase();
-    const pinIngresado = this.normalizarPin(rawInput);
+    const rawInput = (this.codigoEscaneadoManual || '').trim().toUpperCase();
+    const pinIngresado = this.extraerSoloDigitosOPin(rawInput);
 
-    if (!pinIngresado) {
+    if (!pinIngresado || pinIngresado.length < 4) {
       this.errorModalEscaner = '⚠️ Escribe los 6 dígitos del PIN o apunta la cámara al QR.';
-      this.notificar('Ingresa el PIN de la pantalla', 'alerta');
+      this.notificar('Ingresa los 6 dígitos del código', 'alerta');
       this.cdr.detectChanges();
       return;
     }
@@ -743,21 +837,35 @@ export class App implements OnInit, OnDestroy {
       const horaExacta = ahora.toLocaleTimeString('es-ES');
       const LIMITE_15_MIN_MS = 15 * 60 * 1000;
 
-      const reg = this.registroActivo;
-      const pinRegistro = this.normalizarPin(reg?.codigoQR);
-      const pinKiosco = this.normalizarPin(this.qrKioscoActivo?.codigo);
+      // Consultar datos frescos directo de Firestore para que nunca falle por desfase de sincronización
+      const [registrosFrescos, qrKioscoFresco] = await Promise.all([
+        this.registroService.obtenerRegistrosDirecto(),
+        this.registroService.obtenerQrKioscoDirecto()
+      ]);
 
-      // Caso 1: Coincide con el código QR del registro activo del estudiante
-      if (reg && pinRegistro && (pinIngresado === pinRegistro || pinIngresado.includes(pinRegistro))) {
-        if (reg.timestampQR && (ahoraMs - reg.timestampQR > LIMITE_15_MIN_MS)) {
+      if (registrosFrescos.length > 0) {
+        this.registros = registrosFrescos.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
+      }
+      if (qrKioscoFresco) {
+        this.qrKioscoActivo = qrKioscoFresco;
+      }
+
+      const regAlumno = this.registroActivo;
+      const pinRegistroAlumno = this.extraerSoloDigitosOPin(regAlumno?.codigoQR);
+      const pinKioscoAdmin = this.extraerSoloDigitosOPin(this.qrKioscoActivo?.codigo);
+
+      // 1. Coincide con el código QR del turno activo del estudiante
+      if (regAlumno && pinRegistroAlumno && (pinIngresado === pinRegistroAlumno || pinIngresado.includes(pinRegistroAlumno))) {
+        const tsCreacion = regAlumno.timestampQR || regAlumno.timestampEntrada || 0;
+        if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_15_MIN_MS)) {
           this.errorModalEscaner = '❌ El código QR caducó (pasaron más de 15 minutos).';
           this.notificar('El código QR ya caducó (límite 15 min)', 'alerta');
           return;
         }
 
-        reg.verificadoCamaraMovil = true;
-        reg.horaEscaneoQR = horaExacta;
-        const idReal = await this.obtenerIdRealRegistro(reg);
+        regAlumno.verificadoCamaraMovil = true;
+        regAlumno.horaEscaneoQR = horaExacta;
+        const idReal = await this.obtenerIdRealRegistro(regAlumno);
         if (idReal) {
           await this.registroService.actualizarRegistro(idReal, {
             verificadoCamaraMovil: true,
@@ -771,19 +879,19 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // Caso 2: Coincide con el QR activo proyectado en la computadora del Administrador
-      if (this.qrKioscoActivo && pinKiosco && (pinIngresado === pinKiosco || pinIngresado.includes(pinKiosco))) {
+      // 2. Coincide con el código QR proyectado en la computadora del Administrador
+      if (this.qrKioscoActivo && pinKioscoAdmin && (pinIngresado === pinKioscoAdmin || pinIngresado.includes(pinKioscoAdmin))) {
         if (ahoraMs - this.qrKioscoActivo.timestamp > LIMITE_15_MIN_MS) {
-          this.errorModalEscaner = '❌ El QR de la computadora caducó (más de 15 min). Pide generar uno nuevo.';
+          this.errorModalEscaner = '❌ El QR de la pantalla caducó (más de 15 min). Pide generar uno nuevo.';
           this.notificar('El QR de pantalla ya caducó', 'alerta');
           return;
         }
 
-        if (reg) {
-          reg.verificadoCamaraMovil = true;
-          reg.horaEscaneoQR = horaExacta;
-          reg.codigoQR = this.qrKioscoActivo.codigo;
-          const idReal = await this.obtenerIdRealRegistro(reg);
+        if (regAlumno) {
+          regAlumno.verificadoCamaraMovil = true;
+          regAlumno.horaEscaneoQR = horaExacta;
+          regAlumno.codigoQR = this.qrKioscoActivo.codigo;
+          const idReal = await this.obtenerIdRealRegistro(regAlumno);
           if (idReal) {
             await this.registroService.actualizarRegistro(idReal, {
               verificadoCamaraMovil: true,
@@ -815,7 +923,9 @@ export class App implements OnInit, OnDestroy {
             horaEscaneoQR: horaExacta
           };
 
-          await this.registroService.agregarRegistro(nuevo);
+          const docRef = await this.registroService.agregarRegistro(nuevo);
+          nuevo.id = docRef.id;
+          this.registros = [nuevo, ...this.registros];
           this.observacionActual = '';
           this.detenerCamara();
           this.recalcularCronometros();
@@ -824,12 +934,40 @@ export class App implements OnInit, OnDestroy {
         }
       }
 
-      // Caso 3: Ningún código coincidió
-      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo.`;
-      this.notificar('Código incorrecto. Verifica los dígitos en la computadora.', 'alerta');
+      // 3. Buscar si el código pertenece a algún registro activo en la base de datos (por ejemplo si el alumno inició en PC con otra sesión)
+      const registroCoincidente = this.registros.find(r => {
+        if (r.estado === 'Completado') return false;
+        const p = this.extraerSoloDigitosOPin(r.codigoQR);
+        return p && (p === pinIngresado || pinIngresado.includes(p));
+      });
+
+      if (registroCoincidente) {
+        const tsCreacion = registroCoincidente.timestampQR || registroCoincidente.timestampEntrada || 0;
+        if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_15_MIN_MS)) {
+          this.errorModalEscaner = '❌ Ese código QR ya caducó (pasaron más de 15 minutos).';
+          return;
+        }
+
+        registroCoincidente.verificadoCamaraMovil = true;
+        registroCoincidente.horaEscaneoQR = horaExacta;
+        if (registroCoincidente.id && !registroCoincidente.id.startsWith('temp_')) {
+          await this.registroService.actualizarRegistro(registroCoincidente.id, {
+            verificadoCamaraMovil: true,
+            horaEscaneoQR: horaExacta
+          });
+        }
+        this.detenerCamara();
+        this.recalcularCronometros();
+        this.notificar(`✅ ¡Código QR validado a las ${horaExacta}!`, 'exito');
+        return;
+      }
+
+      // No coincide con nada
+      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo. Verifica los 6 dígitos en la pantalla.`;
+      this.notificar('Código incorrecto. Revisa los dígitos en la computadora.', 'alerta');
     } catch (error) {
       console.error('Error al validar código:', error);
-      this.errorModalEscaner = '⚠️ Error de conexión al validar. Intenta de nuevo.';
+      this.errorModalEscaner = '⚠️ Error de conexión con Firebase. Intenta de nuevo.';
     } finally {
       this.validandoQR = false;
       this.cdr.detectChanges();
@@ -1018,7 +1156,46 @@ export class App implements OnInit, OnDestroy {
     this.notificar('📄 Reporte descargado correctamente', 'exito');
   }
 
-  // --- FILTROS Y LISTAS ---
+  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS REGISTRADOS (ADMIN) ---
+  get listaEstudiantesRegistrados(): Usuario[] {
+    return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() !== 'admin');
+  }
+
+  get estudiantesFiltradosAdmin(): Usuario[] {
+    const q = this.busquedaAlumnoAdmin.trim().toLowerCase();
+    if (!q) return this.listaEstudiantesRegistrados;
+    return this.listaEstudiantesRegistrados.filter(u =>
+      (u.nombre || '').toLowerCase().includes(q) ||
+      (u.correo || '').toLowerCase().includes(q) ||
+      (u.matricula || '').toLowerCase().includes(q) ||
+      (u.departamento || '').toLowerCase().includes(q)
+    );
+  }
+
+  get totalEstudiantes(): number {
+    return this.listaEstudiantesRegistrados.length;
+  }
+
+  get totalAdmins(): number {
+    return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() === 'admin').length;
+  }
+
+  obtenerEstadoHoyAlumno(alumno: Usuario): string {
+    const hoy = new Date().toLocaleDateString('es-ES');
+    const email = (alumno.correo || '').toLowerCase();
+    const nombre = (alumno.nombre || '').toLowerCase();
+
+    const regHoy = this.registros.find(r =>
+      r.fecha === hoy &&
+      ((r.empleadoId || '').toLowerCase() === email || (r.empleadoNombre || '').toLowerCase() === nombre)
+    );
+
+    if (!regHoy) return '⚪ Sin marcaje hoy';
+    if (regHoy.estado === 'En Turno') return '🟢 En Turno (' + regHoy.horaEntrada + ')';
+    if (regHoy.estado === 'En Pausa') return '☕ En Comida';
+    return '✅ Completado';
+  }
+
   get registrosFiltrados(): Registro[] {
     return this.registros.filter(r => {
       const q = this.busquedaEmpleado.toLowerCase();
@@ -1044,7 +1221,6 @@ export class App implements OnInit, OnDestroy {
     );
   }
 
-  get totalEstudiantes(): number { return this.usuariosSistema.filter(u => u.rol === 'estudiante').length; }
   get personalEnTurno(): number { return this.registros.filter(r => r.estado === 'En Turno').length; }
   get personalEnPausa(): number { return this.registros.filter(r => r.estado === 'En Pausa').length; }
   get totalCompletados(): number { return this.registros.filter(r => r.estado === 'Completado').length; }
@@ -1061,7 +1237,7 @@ export class App implements OnInit, OnDestroy {
   eliminarUsuario(id?: string): void {
     if (!id) return;
     this.usuariosSistema = this.usuariosSistema.filter(u => u.id !== id);
-    this.registroService.eliminarUsuario(id).then(() => this.notificar('Usuario eliminado', 'info'));
+    this.registroService.eliminarUsuario(id).then(() => this.notificar('Alumno eliminado del directorio', 'info'));
     this.cdr.detectChanges();
   }
 

@@ -46,8 +46,9 @@
           type="text"
           class="input-emerald text-center font-mono-bold"
           [(ngModel)]="codigoEscaneadoManual"
+          (input)="onInputCodigoManual($event)"
           (keyup.enter)="validarCodigoEscaner()"
-          placeholder="Ej: TK-588446 o 588446">
+          placeholder="Ej: 588446 o TK-588446">
       </div>
 
       <div class="modal-error-banner" *ngIf="errorModalEscaner">
@@ -100,7 +101,7 @@
 
         <label class="toggle-row">
           <input type="checkbox" [(ngModel)]="empresa.habilitarFormEstudiantes">
-          <span>Pedir Matrícula y Teléfono en formulario de estudiantes</span>
+          <span>Pedir Matrícula y Teléfono en formulario de alumnos</span>
         </label>
 
         <label class="toggle-row">
@@ -150,10 +151,10 @@
     </div>
   </div>
 
-  <!-- MODAL ALTA ESTUDIANTE POR ADMIN -->
+  <!-- MODAL ALTA ALUMNO POR ADMIN -->
   <div class="modal-overlay" *ngIf="mostrarModalNuevoEstudiante">
     <div class="modal-card">
-      <h3 class="modal-title">➕ Registrar Nuevo Estudiante</h3>
+      <h3 class="modal-title">➕ Registrar Nuevo Alumno</h3>
       <p class="modal-sub">Crea las credenciales de acceso para el estudiante:</p>
 
       <div class="form-group margin-b">
@@ -163,7 +164,7 @@
 
       <div class="form-group margin-b">
         <label>Correo Electrónico:</label>
-        <input type="email" class="input-emerald" [(ngModel)]="adminNuevoCorreo" placeholder="estudiante@correo.com">
+        <input type="email" class="input-emerald" [(ngModel)]="adminNuevoCorreo" placeholder="alumno@correo.com">
       </div>
 
       <div class="form-group margin-b">
@@ -192,7 +193,7 @@
       <div class="modal-actions">
         <button type="button" class="btn-cancel-modal" (click)="cerrarModalNuevoEstudiante()">Cancelar</button>
         <button type="button" class="btn-confirm-emerald" (click)="registrarEstudiantePorAdmin()" [disabled]="cargandoAccion">
-          {{ cargandoAccion ? 'Guardando...' : '💾 Guardar Estudiante' }}
+          {{ cargandoAccion ? 'Guardando...' : '💾 Guardar Alumno' }}
         </button>
       </div>
     </div>
@@ -289,7 +290,7 @@
           <div class="form-group flex-1">
             <label>Tipo de Cuenta:</label>
             <select class="select-emerald" [(ngModel)]="formRol" name="rol">
-              <option value="estudiante">👤 Estudiante / Colaborador</option>
+              <option value="estudiante">👤 Alumno / Estudiante</option>
               <option value="admin">👑 Administrador / Encargado</option>
             </select>
           </div>
@@ -324,7 +325,7 @@
           <span class="user-avatar-chip">{{ usuarioActual.avatar }}</span>
           <div>
             <strong>{{ usuarioActual.nombre }}</strong>
-            <small class="block-puesto">{{ usuarioActual.rol === 'admin' ? '👑 Encargado / Admin' : '👤 Estudiante' }}</small>
+            <small class="block-puesto">{{ usuarioActual.rol === 'admin' ? '👑 Encargado / Admin' : '👤 Alumno' }}</small>
           </div>
         </div>
         <button type="button" class="btn-logout-chip" (click)="cerrarSesion()">🔒 Salir</button>
@@ -340,6 +341,9 @@
         <button type="button" class="chip-qr-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="generarQRKioscoAdmin()">
           🖥️ Mostrar QR en Pantalla
         </button>
+        <button type="button" class="chip-refresh-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="recargarDatosDesdeNube(true)">
+          🔄 Actualizar Lista
+        </button>
       </div>
 
       <div class="digital-clock-card">
@@ -350,8 +354,8 @@
     </div>
 
     <main class="main-content">
-      <!-- ==================== VISTA ESTUDIANTE ==================== -->
-      <section class="card kiosk-card" *ngIf="usuarioActual.rol === 'estudiante'">
+      <!-- ==================== VISTA ALUMNO / ESTUDIANTE ==================== -->
+      <section class="card kiosk-card" *ngIf="usuarioActual.rol !== 'admin'">
         <div class="card-header-emerald">
           <h2>⏱️ Control de Asistencia y Cronómetros</h2>
           <p>Monitorea tus tiempos de escaneo QR, registro de actividad y pausa de comida:</p>
@@ -580,59 +584,98 @@
 
       <!-- ==================== VISTA ADMINISTRADOR ==================== -->
       <section class="card" *ngIf="usuarioActual.rol === 'admin'">
+        <!-- KPIs -->
         <div class="kpi-grid">
-          <div class="kpi-box">
-            <div class="kpi-icon icon-green">👥</div>
-            <div><h3>{{ totalEstudiantes }}</h3><span>Estudiantes</span></div>
+          <div class="kpi-box kpi-highlight">
+            <div class="kpi-icon icon-green">🎓</div>
+            <div>
+              <h3>{{ totalEstudiantes }}</h3>
+              <span>Alumnos Registrados</span>
+            </div>
           </div>
           <div class="kpi-box">
             <div class="kpi-icon icon-emerald">🟢</div>
-            <div><h3>{{ personalEnTurno }}</h3><span>En Turno</span></div>
+            <div>
+              <h3>{{ personalEnTurno }}</h3>
+              <span>En Turno Hoy</span>
+            </div>
           </div>
           <div class="kpi-box">
             <div class="kpi-icon icon-amber">☕</div>
-            <div><h3>{{ personalEnPausa }}</h3><span>En Comida</span></div>
+            <div>
+              <h3>{{ personalEnPausa }}</h3>
+              <span>En Comida</span>
+            </div>
           </div>
           <div class="kpi-box">
             <div class="kpi-icon icon-blue">✅</div>
-            <div><h3>{{ totalCompletados }}</h3><span>Completados</span></div>
+            <div>
+              <h3>{{ totalCompletados }}</h3>
+              <span>Turnos Completados</span>
+            </div>
           </div>
         </div>
 
-        <div class="table-header-bar margin-top-2">
-          <h3>👥 Directorio de Estudiantes</h3>
-          <button type="button" class="btn-confirm-emerald" (click)="abrirModalNuevoEstudiante()">➕ Registrar Estudiante</button>
+        <!-- SECCIÓN EXCLUSIVA: ALUMNOS REGISTRADOS (CANTIDAD Y LISTA COMPLETA) -->
+        <div class="students-roster-panel margin-top-2">
+          <div class="table-header-bar">
+            <div>
+              <h3>🎓 Alumnos Registrados ({{ totalEstudiantes }} en total)</h3>
+              <p class="sub-text-gray">Lista completa de estudiantes dados de alta en el sistema:</p>
+            </div>
+            <button type="button" class="btn-confirm-emerald" (click)="abrirModalNuevoEstudiante()">
+              ➕ Registrar Alumno
+            </button>
+          </div>
+
+          <div class="filter-bar margin-top">
+            <input
+              type="text"
+              class="search-emerald"
+              [(ngModel)]="busquedaAlumnoAdmin"
+              placeholder="🔍 Filtrar alumnos por nombre, matrícula, correo o departamento...">
+          </div>
+
+          <div class="table-responsive margin-top">
+            <table class="emerald-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Alumno</th>
+                  <th>Matrícula / ID</th>
+                  <th>Correo Electrónico</th>
+                  <th>Teléfono</th>
+                  <th>Departamento</th>
+                  <th>Estado Hoy</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let alumno of estudiantesFiltradosAdmin; let i = index">
+                  <td><strong>{{ i + 1 }}</strong></td>
+                  <td><strong>{{ alumno.avatar || '🧑‍💻' }} {{ alumno.nombre }}</strong></td>
+                  <td><code class="qr-code-text">{{ alumno.matricula || 'Sin matrícula' }}</code></td>
+                  <td>{{ alumno.correo }}</td>
+                  <td>{{ alumno.telefono || '--' }}</td>
+                  <td><span class="badge-dept-green">{{ alumno.departamento || 'General' }}</span></td>
+                  <td><span class="badge-status st-completado">{{ obtenerEstadoHoyAlumno(alumno) }}</span></td>
+                  <td>
+                    <button type="button" class="btn-delete-row" (click)="eliminarUsuario(alumno.id)">
+                      🗑️ Eliminar
+                    </button>
+                  </td>
+                </tr>
+                <tr *ngIf="estudiantesFiltradosAdmin.length === 0">
+                  <td colspan="8" class="empty-row">
+                    No hay alumnos registrados todavía. Haz clic en "➕ Registrar Alumno" para agregar uno.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        <div class="table-responsive margin-top">
-          <table class="emerald-table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Correo</th>
-                <th>Matrícula / Tel</th>
-                <th>Rol</th>
-                <th>Departamento</th>
-                <th>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let u of usuariosSistema">
-                <td><strong>{{ u.avatar }} {{ u.nombre }}</strong></td>
-                <td>{{ u.correo }}</td>
-                <td>{{ u.matricula || '--' }} {{ u.telefono ? '• ' + u.telefono : '' }}</td>
-                <td>
-                  <span class="badge-status" [ngClass]="{'st-turno': u.rol==='admin', 'st-completado': u.rol==='estudiante'}">
-                    {{ u.rol === 'admin' ? '👑 Admin' : '👤 Estudiante' }}
-                  </span>
-                </td>
-                <td><span class="badge-dept-green">{{ u.departamento }}</span></td>
-                <td><button type="button" class="btn-delete-row" (click)="eliminarUsuario(u.id)">🗑️ Eliminar</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+        <!-- BITÁCORA GENERAL DE ASISTENCIA -->
         <div class="table-header-bar margin-top-2">
           <div>
             <h3>📊 Bitácora General de Asistencia</h3>
@@ -653,7 +696,7 @@
         </div>
 
         <div class="filter-bar margin-top">
-          <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar por estudiante, área o actividad...">
+          <input type="text" class="search-emerald" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar marcaje por alumno, área o actividad...">
           <select class="select-emerald fit-content" [(ngModel)]="filtroEstado">
             <option value="TODOS">Todos los estados</option>
             <option value="En Turno">🟢 En Turno</option>
@@ -666,7 +709,7 @@
           <table class="emerald-table">
             <thead>
               <tr>
-                <th>Estudiante</th>
+                <th>Alumno</th>
                 <th>Departamento</th>
                 <th>Fecha</th>
                 <th>Entrada</th>

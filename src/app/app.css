@@ -8,6 +8,30 @@
   color: #f8fafc;
 }
 
+/* Panel Alumnos Registrados Admin */
+.students-roster-panel {
+  background: #090d16;
+  border: 1px solid #10b981;
+  border-radius: 20px;
+  padding: 1.4rem;
+}
+
+.kpi-highlight {
+  border-color: #10b981 !important;
+  background: rgba(6, 78, 59, 0.25) !important;
+}
+
+.chip-refresh-btn {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #475569;
+  padding: 0.48rem 0.9rem;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 /* Grid de los 3 Cronómetros */
 .timers-dashboard-grid {
   display: grid;
@@ -104,10 +128,10 @@
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 165px;
-  height: 165px;
+  width: 170px;
+  height: 170px;
   transform: translate(-50%, -50%);
-  border: 2px dashed rgba(52, 211, 153, 0.85);
+  border: 2px dashed rgba(52, 211, 153, 0.9);
   border-radius: 16px;
   pointer-events: none;
 }
@@ -659,7 +683,7 @@
   align-items: center;
   gap: 0.9rem;
 }
-.qr-image { width: 220px; height: 220px; border-radius: 12px; border: 4px solid #ffffff; }
+.qr-image { width: 230px; height: 230px; border-radius: 12px; border: 4px solid #ffffff; background: #ffffff; }
 .qr-pin-badge {
   background: #111827;
   border: 1px solid #334155;

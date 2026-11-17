@@ -11,7 +11,8 @@ import {
   doc,
   query,
   where,
-  getDocs
+  getDocs,
+  getDoc
 } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
@@ -39,7 +40,7 @@ export interface Usuario {
   nombre: string;
   correo: string;
   password?: string;
-  rol: 'estudiante' | 'admin';
+  rol: 'estudiante' | 'admin' | string;
   departamento: string;
   avatar: string;
   puesto: string;
@@ -96,6 +97,17 @@ export class RegistroService {
     return docData(qrDoc) as Observable<QrKioscoActivo | undefined>;
   }
 
+  async obtenerQrKioscoDirecto(): Promise<QrKioscoActivo | null> {
+    try {
+      const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
+      const snap = await getDoc(qrDoc);
+      return snap.exists() ? (snap.data() as QrKioscoActivo) : null;
+    } catch (e) {
+      console.error('Error leyendo QR kiosco:', e);
+      return null;
+    }
+  }
+
   guardarQrKiosco(qr: QrKioscoActivo): Promise<void> {
     const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
     return setDoc(qrDoc, qr);
@@ -104,6 +116,17 @@ export class RegistroService {
   getRegistros(): Observable<Registro[]> {
     const registrosRef = collection(this.firestore, 'registros');
     return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
+  }
+
+  async obtenerRegistrosDirecto(): Promise<Registro[]> {
+    try {
+      const registrosRef = collection(this.firestore, 'registros');
+      const snap = await getDocs(registrosRef);
+      return snap.docs.map(d => ({ ...(d.data() as Registro), id: d.id }));
+    } catch (e) {
+      console.error('Error leyendo registros directo:', e);
+      return [];
+    }
   }
 
   agregarRegistro(registro: Registro) {
@@ -126,6 +149,17 @@ export class RegistroService {
   getUsuarios(): Observable<Usuario[]> {
     const usuariosRef = collection(this.firestore, 'usuarios');
     return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
+  }
+
+  async obtenerUsuariosDirecto(): Promise<Usuario[]> {
+    try {
+      const usuariosRef = collection(this.firestore, 'usuarios');
+      const snap = await getDocs(usuariosRef);
+      return snap.docs.map(d => ({ ...(d.data() as Usuario), id: d.id }));
+    } catch (e) {
+      console.error('Error leyendo usuarios directo:', e);
+      return [];
+    }
   }
 
   async registrarUsuario(usuario: Usuario): Promise<any> {
