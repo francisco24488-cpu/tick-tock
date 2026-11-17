@@ -22,6 +22,9 @@ export interface Empresa {
   ubicacion: string;
   codigo: string;
   horario: string;
+  horaInicio?: string;
+  horaFin?: string;
+  colorTema?: string;
   duracionComidaMinutos: number;
   habilitarFormEstudiantes: boolean;
   habilitarReporteHoras: boolean;

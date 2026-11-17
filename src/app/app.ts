@@ -19,11 +19,14 @@ export class App implements OnInit, OnDestroy {
   sesionIniciada: boolean = false;
 
   empresa: Empresa = {
-    nombre: 'Corporación TickTock',
-    sucursal: 'Campus Principal',
-    ubicacion: 'Av. Tecnológico #100, Col. Centro',
+    nombre: 'TickTock Asistencia',
+    sucursal: '',
+    ubicacion: '',
     codigo: 'TT-2026',
-    horario: '08:00 AM - 05:00 PM',
+    horario: '',
+    horaInicio: '',
+    horaFin: '',
+    colorTema: '#f97316',
     duracionComidaMinutos: 45,
     habilitarFormEstudiantes: true,
     habilitarReporteHoras: true,
@@ -31,17 +34,53 @@ export class App implements OnInit, OnDestroy {
     habilitarReporteCompleto: true
   };
 
-  // Formularios Auth
+  // Paletas de color disponibles para el Administrador (siempre sobre fondo blanco limpio)
+  temasDisponibles = [
+    { nombre: 'Naranja Vibrante', hex: '#f97316' },
+    { nombre: 'Azul Cielo', hex: '#2563eb' },
+    { nombre: 'Morado Índigo', hex: '#7c3aed' },
+    { nombre: 'Rosa Coral', hex: '#e11d48' },
+    { nombre: 'Verde Turquesa', hex: '#0d9488' }
+  ];
+
+  // Opciones desplegables para viñetas de horario ("De:" y "A:")
+  opcionesHorario: string[] = [
+    '5:00 de la mañana',
+    '6:00 de la mañana',
+    '7:00 de la mañana',
+    '7:30 de la mañana',
+    '8:00 de la mañana',
+    '8:30 de la mañana',
+    '9:00 de la mañana',
+    '9:30 de la mañana',
+    '10:00 de la mañana',
+    '11:00 de la mañana',
+    '12:00 del mediodía',
+    '1:00 de la tarde',
+    '2:00 de la tarde',
+    '3:00 de la tarde',
+    '4:00 de la tarde',
+    '5:00 de la tarde',
+    '6:00 de la tarde',
+    '7:00 de la tarde',
+    '8:00 de la noche',
+    '9:00 de la noche',
+    '10:00 de la noche',
+    '11:00 de la noche'
+  ];
+
+  // Formularios Auth (100% vacíos para que solo se vea el placeholder de guía)
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
   formRol: 'estudiante' | 'admin' = 'estudiante';
   formDepartamento: string = 'General';
   formAvatar: string = '🧑‍💻';
-  formEmpresaNombre: string = 'Corporación TickTock';
-  formSucursal: string = 'Campus Principal';
-  formUbicacion: string = 'Av. Tecnológico #100';
-  formHorario: string = '08:00 AM - 05:00 PM';
+  formEmpresaNombre: string = '';
+  formSucursal: string = '';
+  formUbicacion: string = '';
+  formHoraInicio: string = '';
+  formHoraFin: string = '';
   formTelefono: string = '';
   formMatricula: string = '';
 
@@ -114,15 +153,15 @@ export class App implements OnInit, OnDestroy {
     this.cargarLibreriasQR();
     this.cargarSesionGuardada();
     this.iniciarRelojYCronometros();
-
-    // Carga inicial directa desde Firestore para evitar demoras
     this.recargarDatosDesdeNube(false);
 
-    // Suscripciones en tiempo real
     this.registroService.getEmpresaConfig().subscribe({
       next: (cfg) => {
         if (cfg) {
           this.empresa = { ...this.empresa, ...cfg };
+          if (!this.empresa.colorTema) {
+            this.empresa.colorTema = '#f97316';
+          }
           this.cdr.detectChanges();
         }
       },
@@ -158,6 +197,40 @@ export class App implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.masterTimerId) clearInterval(this.masterTimerId);
     this.detenerCamara();
+  }
+
+  // --- VARIABLES CSS DINÁMICAS SEGÚN COLOR SELECCIONADO POR EL ADMIN ---
+  get temaEstilos(): { [key: string]: string } {
+    const primary = this.empresa.colorTema || '#f97316';
+    const dark = this.oscurecerHex(primary, 18);
+    return {
+      '--primary': primary,
+      '--primary-dark': dark,
+      '--primary-soft': `${primary}16`,
+      '--primary-border': `${primary}48`
+    };
+  }
+
+  private oscurecerHex(hex: string, porcentaje: number): string {
+    const clean = hex.replace('#', '');
+    if (clean.length !== 6) return '#ea580c';
+    const num = parseInt(clean, 16);
+    const amt = Math.round(2.55 * porcentaje);
+    const r = Math.max(0, Math.min(255, (num >> 16) - amt));
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 0x00ff) - amt));
+    const b = Math.max(0, Math.min(255, (num & 0x0000ff) - amt));
+    return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+  }
+
+  async cambiarColorTemaRapido(hex: string): Promise<void> {
+    this.empresa.colorTema = hex;
+    this.cdr.detectChanges();
+    try {
+      await this.registroService.guardarEmpresaConfig(this.empresa);
+      this.notificar('🎨 Color de la plataforma actualizado', 'exito');
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   async recargarDatosDesdeNube(mostrarAviso: boolean = true): Promise<void> {
@@ -201,7 +274,6 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- RELOJ MAESTRO + ACTUALIZACIÓN DE LOS 3 CRONÓMETROS CADA SEGUNDO ---
   private iniciarRelojYCronometros(): void {
     const tick = () => {
       const ahora = new Date();
@@ -230,7 +302,6 @@ export class App implements OnInit, OnDestroy {
     const ahoraMs = Date.now();
     const reg = this.registroActivo;
 
-    // 1. Cronómetro de QR (15 minutos = 900 segundos)
     const refQrTs = this.mostrarModalQR && this.timestampQRGenerado
       ? this.timestampQRGenerado
       : (reg?.timestampQR || reg?.timestampEntrada || this.qrKioscoActivo?.timestamp || 0);
@@ -242,7 +313,6 @@ export class App implements OnInit, OnDestroy {
       this.tiempoRestanteQR = 0;
     }
 
-    // 2. Cronómetro de Registro de Actividad (10 minutos = 600 segundos)
     if (reg && !this.esActividadRegistrada(reg) && reg.timestampEntrada) {
       const restAct = 600 - Math.floor((ahoraMs - reg.timestampEntrada) / 1000);
       this.tiempoRestanteActividad = restAct > 0 ? restAct : 0;
@@ -250,7 +320,6 @@ export class App implements OnInit, OnDestroy {
       this.tiempoRestanteActividad = 0;
     }
 
-    // 3. Cronómetro de Comida / Pausa
     if (reg && reg.estado === 'En Pausa' && reg.timestampPausaInicio) {
       const totalSegsComida = (Number(this.empresa.duracionComidaMinutos) || 45) * 60;
       const restPausa = totalSegsComida - Math.floor((ahoraMs - reg.timestampPausaInicio) / 1000);
@@ -361,13 +430,17 @@ export class App implements OnInit, OnDestroy {
   // --- REGISTRO Y LOGIN ---
   async ejecutarRegistro(): Promise<void> {
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
-      this.notificar('Completa los campos obligatorios', 'alerta');
+      this.notificar('Completa tu nombre, correo y contraseña', 'alerta');
       return;
     }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const correoNorm = this.formCorreo.trim().toLowerCase();
+
+    const horarioFormateado = (this.formHoraInicio && this.formHoraFin)
+      ? `De ${this.formHoraInicio} a ${this.formHoraFin}`
+      : (this.formHoraInicio ? `Desde ${this.formHoraInicio}` : (this.empresa.horario || 'Por definir'));
 
     try {
       const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
@@ -386,16 +459,18 @@ export class App implements OnInit, OnDestroy {
         puesto: this.formRol === 'admin' ? 'Administrador General' : 'Estudiante / Colaborador',
         empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre,
         sucursal: this.formSucursal.trim() || this.empresa.sucursal,
-        horario: this.formHorario.trim() || this.empresa.horario,
+        horario: horarioFormateado,
         telefono: this.formTelefono.trim(),
         matricula: this.formMatricula.trim()
       };
 
       if (this.formRol === 'admin') {
-        this.empresa.nombre = nuevoUsuario.empresaNombre || this.empresa.nombre;
-        this.empresa.sucursal = nuevoUsuario.sucursal || this.empresa.sucursal;
-        this.empresa.ubicacion = this.formUbicacion.trim() || this.empresa.ubicacion;
-        this.empresa.horario = nuevoUsuario.horario || this.empresa.horario;
+        if (this.formEmpresaNombre.trim()) this.empresa.nombre = this.formEmpresaNombre.trim();
+        if (this.formSucursal.trim()) this.empresa.sucursal = this.formSucursal.trim();
+        if (this.formUbicacion.trim()) this.empresa.ubicacion = this.formUbicacion.trim();
+        if (this.formHoraInicio) this.empresa.horaInicio = this.formHoraInicio;
+        if (this.formHoraFin) this.empresa.horaFin = this.formHoraFin;
+        if (this.formHoraInicio || this.formHoraFin) this.empresa.horario = horarioFormateado;
         await this.registroService.guardarEmpresaConfig(this.empresa);
       }
 
@@ -487,6 +562,13 @@ export class App implements OnInit, OnDestroy {
     this.formNombre = '';
     this.formCorreo = '';
     this.formPassword = '';
+    this.formEmpresaNombre = '';
+    this.formSucursal = '';
+    this.formUbicacion = '';
+    this.formHoraInicio = '';
+    this.formHoraFin = '';
+    this.formMatricula = '';
+    this.formTelefono = '';
   }
 
   // --- CONFIGURACIÓN DE EMPRESA ---
@@ -503,9 +585,16 @@ export class App implements OnInit, OnDestroy {
   async guardarConfiguracionEmpresa(): Promise<void> {
     this.cargandoAccion = true;
     this.cdr.detectChanges();
+
+    if (this.empresa.horaInicio && this.empresa.horaFin) {
+      this.empresa.horario = `De ${this.empresa.horaInicio} a ${this.empresa.horaFin}`;
+    } else if (this.empresa.horaInicio) {
+      this.empresa.horario = `Desde ${this.empresa.horaInicio}`;
+    }
+
     try {
       await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('✅ Configuración y habilitaciones guardadas', 'exito');
+      this.notificar('✅ Configuración, horario y colores guardados', 'exito');
       this.mostrarModalEmpresa = false;
     } catch (e) {
       console.error(e);
@@ -543,7 +632,6 @@ export class App implements OnInit, OnDestroy {
     );
     if (encontrado?.id) return encontrado.id;
 
-    // Buscar directamente en Firestore si aún no llega por suscripción
     const frescos = await this.registroService.obtenerRegistrosDirecto();
     const match = frescos.find(
       r => r.timestampEntrada === reg.timestampEntrada ||
@@ -552,7 +640,6 @@ export class App implements OnInit, OnDestroy {
     return match?.id || null;
   }
 
-  // --- GENERAR QR DESDE LA COMPUTADORA DEL ENCARGADO (KIOSCO) ---
   async generarQRKioscoAdmin(): Promise<void> {
     const ahora = Date.now();
     const pin = 'TK-' + Math.floor(100000 + Math.random() * 900000);
@@ -573,7 +660,6 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- MARCAR ENTRADA Y GENERAR QR ---
   async marcarEntrada(): Promise<void> {
     if (!this.usuarioActual || this.estaEnTurno || this.estaEnPausa || this.cargandoAccion) return;
 
@@ -636,7 +722,6 @@ export class App implements OnInit, OnDestroy {
     this.codigoGeneradoQR = pin;
     this.timestampQRGenerado = timestampCreacion;
 
-    // Generar QR localmente en alta resolución si la librería ya cargó; si no, usar API
     const QRCodeLib = (window as any).QRCode;
     if (QRCodeLib && typeof QRCodeLib.toDataURL === 'function') {
       try {
@@ -695,7 +780,7 @@ export class App implements OnInit, OnDestroy {
             videoElem.srcObject = this.mediaStream;
             videoElem.setAttribute('playsinline', 'true');
             videoElem.play().then(() => {
-              this.estadoCamaraTexto = 'Centra el código QR dentro del recuadro verde...';
+              this.estadoCamaraTexto = 'Centra el código QR dentro del recuadro...';
               this.cdr.detectChanges();
               this.iniciarDeteccionQR(videoElem);
             }).catch(() => {
@@ -734,7 +819,6 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // 1. Motor nativo del teléfono (Android Chrome / Edge)
       if (detectorNativo) {
         try {
           const barcodes = await detectorNativo.detect(videoElem);
@@ -752,13 +836,11 @@ export class App implements OnInit, OnDestroy {
         }
       }
 
-      // 2. Motor jsQR (iOS Safari + cualquier navegador) sobre recorte central y cuadro completo
       const jsQRFunc = (window as any).jsQR;
       if (jsQRFunc && ctxFull && ctxCrop && videoElem.videoWidth > 0) {
         const vw = videoElem.videoWidth;
         const vh = videoElem.videoHeight;
 
-        // A) Recorte central (60% del centro donde apunta el cuadro guía)
         const cropSize = Math.floor(Math.min(vw, vh) * 0.65);
         const sx = Math.floor((vw - cropSize) / 2);
         const sy = Math.floor((vh - cropSize) / 2);
@@ -775,7 +857,6 @@ export class App implements OnInit, OnDestroy {
           return;
         }
 
-        // B) Cuadro completo reducido a 640px
         const scale = Math.min(1, 640 / vw);
         const fw = Math.floor(vw * scale);
         const fh = Math.floor(vh * scale);
@@ -837,7 +918,6 @@ export class App implements OnInit, OnDestroy {
       const horaExacta = ahora.toLocaleTimeString('es-ES');
       const LIMITE_15_MIN_MS = 15 * 60 * 1000;
 
-      // Consultar datos frescos directo de Firestore para que nunca falle por desfase de sincronización
       const [registrosFrescos, qrKioscoFresco] = await Promise.all([
         this.registroService.obtenerRegistrosDirecto(),
         this.registroService.obtenerQrKioscoDirecto()
@@ -854,7 +934,6 @@ export class App implements OnInit, OnDestroy {
       const pinRegistroAlumno = this.extraerSoloDigitosOPin(regAlumno?.codigoQR);
       const pinKioscoAdmin = this.extraerSoloDigitosOPin(this.qrKioscoActivo?.codigo);
 
-      // 1. Coincide con el código QR del turno activo del estudiante
       if (regAlumno && pinRegistroAlumno && (pinIngresado === pinRegistroAlumno || pinIngresado.includes(pinRegistroAlumno))) {
         const tsCreacion = regAlumno.timestampQR || regAlumno.timestampEntrada || 0;
         if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_15_MIN_MS)) {
@@ -879,7 +958,6 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // 2. Coincide con el código QR proyectado en la computadora del Administrador
       if (this.qrKioscoActivo && pinKioscoAdmin && (pinIngresado === pinKioscoAdmin || pinIngresado.includes(pinKioscoAdmin))) {
         if (ahoraMs - this.qrKioscoActivo.timestamp > LIMITE_15_MIN_MS) {
           this.errorModalEscaner = '❌ El QR de la pantalla caducó (más de 15 min). Pide generar uno nuevo.';
@@ -934,7 +1012,6 @@ export class App implements OnInit, OnDestroy {
         }
       }
 
-      // 3. Buscar si el código pertenece a algún registro activo en la base de datos (por ejemplo si el alumno inició en PC con otra sesión)
       const registroCoincidente = this.registros.find(r => {
         if (r.estado === 'Completado') return false;
         const p = this.extraerSoloDigitosOPin(r.codigoQR);
@@ -962,7 +1039,6 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // No coincide con nada
       this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo. Verifica los 6 dígitos en la pantalla.`;
       this.notificar('Código incorrecto. Revisa los dígitos en la computadora.', 'alerta');
     } catch (error) {
@@ -974,7 +1050,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- BOTÓN DE PAUSA COMIDA Y REANUDAR ---
+  // --- PAUSA COMIDA Y REANUDAR ---
   async conmutarPausa(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg) {
@@ -1026,7 +1102,6 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- ACTUALIZAR ACTIVIDAD ---
   async actualizarActividad(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg) return;
@@ -1062,7 +1137,6 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- SALIDA ---
   abrirModalSalida(): void {
     if (!this.registroActivo) return;
     this.reporteFinalTexto = '';
@@ -1156,7 +1230,7 @@ export class App implements OnInit, OnDestroy {
     this.notificar('📄 Reporte descargado correctamente', 'exito');
   }
 
-  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS REGISTRADOS (ADMIN) ---
+  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS REGISTRADOS ---
   get listaEstudiantesRegistrados(): Usuario[] {
     return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() !== 'admin');
   }
@@ -1174,10 +1248,6 @@ export class App implements OnInit, OnDestroy {
 
   get totalEstudiantes(): number {
     return this.listaEstudiantesRegistrados.length;
-  }
-
-  get totalAdmins(): number {
-    return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() === 'admin').length;
   }
 
   obtenerEstadoHoyAlumno(alumno: Usuario): string {
