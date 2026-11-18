@@ -90,6 +90,17 @@ export class RegistroService {
     return docData(configDoc) as Observable<Empresa | undefined>;
   }
 
+  async obtenerEmpresaConfigDirecto(): Promise<Empresa | null> {
+    try {
+      const configDoc = doc(this.firestore, 'configuracion/empresa');
+      const snap = await getDoc(configDoc);
+      return snap.exists() ? (snap.data() as Empresa) : null;
+    } catch (e) {
+      console.error('Error leyendo configuración de empresa:', e);
+      return null;
+    }
+  }
+
   guardarEmpresaConfig(empresa: Empresa): Promise<void> {
     const configDoc = doc(this.firestore, 'configuracion/empresa');
     return setDoc(configDoc, empresa, { merge: true });

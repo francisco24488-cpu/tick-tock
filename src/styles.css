@@ -1,5 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
+:root {
+  --primary: #f97316;
+  --primary-dark: #ea580c;
+  --primary-soft: #fff7ed;
+  --primary-border: #fed7aa;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

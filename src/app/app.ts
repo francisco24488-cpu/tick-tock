@@ -34,7 +34,6 @@ export class App implements OnInit, OnDestroy {
     habilitarReporteCompleto: true
   };
 
-  // Paletas de color disponibles para el Administrador (siempre sobre fondo blanco limpio)
   temasDisponibles = [
     { nombre: 'Naranja Vibrante', hex: '#f97316' },
     { nombre: 'Azul Cielo', hex: '#2563eb' },
@@ -43,7 +42,6 @@ export class App implements OnInit, OnDestroy {
     { nombre: 'Verde Turquesa', hex: '#0d9488' }
   ];
 
-  // Opciones desplegables para viñetas de horario ("De:" y "A:")
   opcionesHorario: string[] = [
     '5:00 de la mañana',
     '6:00 de la mañana',
@@ -69,7 +67,7 @@ export class App implements OnInit, OnDestroy {
     '11:00 de la noche'
   ];
 
-  // Formularios Auth (100% vacíos para que solo se vea el placeholder de guía)
+  // Formularios Auth (limpios, solo guía placeholder)
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
@@ -111,9 +109,9 @@ export class App implements OnInit, OnDestroy {
   private scanLoopId: any = null;
 
   // Los 3 Cronómetros en Vivo
-  tiempoRestanteQR: number = 0;         // 15 min (900s) para escanear QR
-  tiempoRestanteActividad: number = 0;  // 10 min (600s) para registrar actividad
-  tiempoRestantePausa: number = 0;      // Minutos configurados para comida
+  tiempoRestanteQR: number = 0;
+  tiempoRestanteActividad: number = 0;
+  tiempoRestantePausa: number = 0;
   private avisoComida2MinDado: boolean = false;
   private avisoComida1MinDado: boolean = false;
 
@@ -151,6 +149,7 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.cargarLibreriasQR();
+    this.cargarConfiguracionLocal();
     this.cargarSesionGuardada();
     this.iniciarRelojYCronometros();
     this.recargarDatosDesdeNube(false);
@@ -158,11 +157,7 @@ export class App implements OnInit, OnDestroy {
     this.registroService.getEmpresaConfig().subscribe({
       next: (cfg) => {
         if (cfg) {
-          this.empresa = { ...this.empresa, ...cfg };
-          if (!this.empresa.colorTema) {
-            this.empresa.colorTema = '#f97316';
-          }
-          this.cdr.detectChanges();
+          this.aplicarConfiguracionRecibida(cfg);
         }
       },
       error: (err) => console.error('Error config empresa:', err)
@@ -199,7 +194,7 @@ export class App implements OnInit, OnDestroy {
     this.detenerCamara();
   }
 
-  // --- VARIABLES CSS DINÁMICAS SEGÚN COLOR SELECCIONADO POR EL ADMIN ---
+  // --- GESTIÓN GLOBAL DE COLORES (APLICACIÓN INSTANTÁNEA + PERSISTENCIA EN NUBE) ---
   get temaEstilos(): { [key: string]: string } {
     const primary = this.empresa.colorTema || '#f97316';
     const dark = this.oscurecerHex(primary, 18);
@@ -209,6 +204,42 @@ export class App implements OnInit, OnDestroy {
       '--primary-soft': `${primary}16`,
       '--primary-border': `${primary}48`
     };
+  }
+
+  private aplicarVariablesGlobalesCSS(hex: string): void {
+    const color = hex || '#f97316';
+    const dark = this.oscurecerHex(color, 18);
+    const root = document.documentElement;
+    root.style.setProperty('--primary', color);
+    root.style.setProperty('--primary-dark', dark);
+    root.style.setProperty('--primary-soft', `${color}16`);
+    root.style.setProperty('--primary-border', `${color}48`);
+  }
+
+  private cargarConfiguracionLocal(): void {
+    const raw = localStorage.getItem('ticktock_empresa_cfg');
+    if (raw) {
+      try {
+        const saved = JSON.parse(raw);
+        if (saved) {
+          this.empresa = { ...this.empresa, ...saved };
+        }
+      } catch {
+        localStorage.removeItem('ticktock_empresa_cfg');
+      }
+    }
+    this.aplicarVariablesGlobalesCSS(this.empresa.colorTema || '#f97316');
+  }
+
+  private aplicarConfiguracionRecibida(cfg: Partial<Empresa>): void {
+    this.empresa = {
+      ...this.empresa,
+      ...cfg,
+      colorTema: cfg.colorTema || this.empresa.colorTema || '#f97316'
+    };
+    this.aplicarVariablesGlobalesCSS(this.empresa.colorTema!);
+    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
+    this.cdr.detectChanges();
   }
 
   private oscurecerHex(hex: string, porcentaje: number): string {
@@ -222,25 +253,40 @@ export class App implements OnInit, OnDestroy {
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   }
 
+  seleccionarColorEnModal(hex: string): void {
+    this.empresa.colorTema = hex;
+    this.aplicarVariablesGlobalesCSS(hex);
+    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
+    this.cdr.detectChanges();
+  }
+
   async cambiarColorTemaRapido(hex: string): Promise<void> {
     this.empresa.colorTema = hex;
+    this.aplicarVariablesGlobalesCSS(hex);
+    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
     this.cdr.detectChanges();
+
     try {
       await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('🎨 Color de la plataforma actualizado', 'exito');
+      this.notificar('🎨 Color actualizado para toda la página', 'exito');
     } catch (e) {
-      console.error(e);
+      console.error('Error guardando color en Firebase:', e);
+      this.notificar('⚠️ Color aplicado localmente, revisa permisos de Firebase', 'alerta');
     }
   }
 
   async recargarDatosDesdeNube(mostrarAviso: boolean = true): Promise<void> {
     try {
-      const [usuarios, registros, qrKiosco] = await Promise.all([
+      const [cfgNube, usuarios, registros, qrKiosco] = await Promise.all([
+        this.registroService.obtenerEmpresaConfigDirecto(),
         this.registroService.obtenerUsuariosDirecto(),
         this.registroService.obtenerRegistrosDirecto(),
         this.registroService.obtenerQrKioscoDirecto()
       ]);
 
+      if (cfgNube) {
+        this.aplicarConfiguracionRecibida(cfgNube);
+      }
       if (usuarios.length > 0) this.usuariosSistema = usuarios;
       if (registros.length > 0) {
         this.registros = registros.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
@@ -250,7 +296,7 @@ export class App implements OnInit, OnDestroy {
       this.recalcularCronometros();
       this.cdr.detectChanges();
       if (mostrarAviso) {
-        this.notificar(`🔄 Datos sincronizados (${this.totalEstudiantes} alumnos registrados)`, 'info');
+        this.notificar(`🔄 Datos y colores sincronizados (${this.totalEstudiantes} alumnos)`, 'info');
       }
     } catch (e) {
       console.error('Error sincronizando datos:', e);
@@ -471,6 +517,7 @@ export class App implements OnInit, OnDestroy {
         if (this.formHoraInicio) this.empresa.horaInicio = this.formHoraInicio;
         if (this.formHoraFin) this.empresa.horaFin = this.formHoraFin;
         if (this.formHoraInicio || this.formHoraFin) this.empresa.horario = horarioFormateado;
+        localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
         await this.registroService.guardarEmpresaConfig(this.empresa);
       }
 
@@ -592,13 +639,16 @@ export class App implements OnInit, OnDestroy {
       this.empresa.horario = `Desde ${this.empresa.horaInicio}`;
     }
 
+    this.aplicarVariablesGlobalesCSS(this.empresa.colorTema || '#f97316');
+    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
+
     try {
       await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('✅ Configuración, horario y colores guardados', 'exito');
+      this.notificar('✅ Configuración, horario y color guardados para todos', 'exito');
       this.mostrarModalEmpresa = false;
     } catch (e) {
       console.error(e);
-      this.notificar('Error al guardar configuración', 'alerta');
+      this.notificar('Error al guardar en la nube', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -638,26 +688,6 @@ export class App implements OnInit, OnDestroy {
            (r.codigoQR && r.codigoQR === reg.codigoQR && r.estado !== 'Completado')
     );
     return match?.id || null;
-  }
-
-  async generarQRKioscoAdmin(): Promise<void> {
-    const ahora = Date.now();
-    const pin = 'TK-' + Math.floor(100000 + Math.random() * 900000);
-    const qrData: QrKioscoActivo = {
-      codigo: pin,
-      timestamp: ahora,
-      generadoPor: this.usuarioActual?.nombre || 'Administrador'
-    };
-
-    this.qrKioscoActivo = qrData;
-    await this.mostrarQRConTemporizador(pin, ahora);
-    try {
-      await this.registroService.guardarQrKiosco(qrData);
-      this.notificar('🖥️ Código QR generado en pantalla (válido por 15 min)', 'exito');
-    } catch (e) {
-      console.error(e);
-    }
-    this.cdr.detectChanges();
   }
 
   async marcarEntrada(): Promise<void> {
@@ -748,7 +778,7 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- ESCÁNER CON CÁMARA REAL + VALIDACIÓN DIRECTA EN FIREBASE ---
+  // --- ESCÁNER CON CÁMARA REAL ---
   onInputCodigoManual(event: Event): void {
     const val = (event.target as HTMLInputElement).value;
     this.codigoEscaneadoManual = val;
@@ -795,7 +825,7 @@ export class App implements OnInit, OnDestroy {
       }
     } catch (e) {
       console.warn('No se pudo abrir la cámara:', e);
-      this.estadoCamaraTexto = 'Sin permiso de cámara. Escribe el PIN de la computadora abajo.';
+      this.estadoCamaraTexto = 'Sin permiso de cámara. Escribe el PIN de la pantalla abajo.';
       this.cdr.detectChanges();
     }
   }
@@ -960,8 +990,7 @@ export class App implements OnInit, OnDestroy {
 
       if (this.qrKioscoActivo && pinKioscoAdmin && (pinIngresado === pinKioscoAdmin || pinIngresado.includes(pinKioscoAdmin))) {
         if (ahoraMs - this.qrKioscoActivo.timestamp > LIMITE_15_MIN_MS) {
-          this.errorModalEscaner = '❌ El QR de la pantalla caducó (más de 15 min). Pide generar uno nuevo.';
-          this.notificar('El QR de pantalla ya caducó', 'alerta');
+          this.errorModalEscaner = '❌ El QR caducó (más de 15 min).';
           return;
         }
 
@@ -1039,8 +1068,8 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo. Verifica los 6 dígitos en la pantalla.`;
-      this.notificar('Código incorrecto. Revisa los dígitos en la computadora.', 'alerta');
+      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo. Verifica los 6 dígitos.`;
+      this.notificar('Código incorrecto. Revisa los dígitos.', 'alerta');
     } catch (error) {
       console.error('Error al validar código:', error);
       this.errorModalEscaner = '⚠️ Error de conexión con Firebase. Intenta de nuevo.';
@@ -1104,7 +1133,10 @@ export class App implements OnInit, OnDestroy {
 
   async actualizarActividad(): Promise<void> {
     const reg = this.registroActivo;
-    if (!reg) return;
+    if (!reg) {
+      this.notificar('Primero marca tu entrada para guardar tu actividad', 'alerta');
+      return;
+    }
 
     if (!this.observacionActual.trim()) {
       this.notificar('Escribe la actividad realizada para guardarla', 'alerta');
