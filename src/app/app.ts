@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RegistroService, Empresa, Usuario, Registro, QrKioscoActivo } from './services/registro';
+import { RegistroService, Empresa, Usuario, Registro, QrKioscoActivo, ActividadItem } from './services/registro';
 
 @Component({
   selector: 'app-root',
@@ -67,7 +67,7 @@ export class App implements OnInit, OnDestroy {
     '11:00 de la noche'
   ];
 
-  // Formularios Auth (limpios, solo guía placeholder)
+  // Formularios Auth
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
@@ -108,7 +108,7 @@ export class App implements OnInit, OnDestroy {
   private mediaStream: MediaStream | null = null;
   private scanLoopId: any = null;
 
-  // Los 3 Cronómetros en Vivo
+  // Cronómetros en Vivo
   tiempoRestanteQR: number = 0;
   tiempoRestanteActividad: number = 0;
   tiempoRestantePausa: number = 0;
@@ -194,7 +194,7 @@ export class App implements OnInit, OnDestroy {
     this.detenerCamara();
   }
 
-  // --- GESTIÓN GLOBAL DE COLORES (APLICACIÓN INSTANTÁNEA + PERSISTENCIA EN NUBE) ---
+  // --- GESTIÓN GLOBAL DE COLORES ---
   get temaEstilos(): { [key: string]: string } {
     const primary = this.empresa.colorTema || '#f97316';
     const dark = this.oscurecerHex(primary, 18);
@@ -376,7 +376,7 @@ export class App implements OnInit, OnDestroy {
         this.notificar('⏰ ¡Faltan 2 MINUTOS para terminar tu tiempo de comida!', 'alerta');
       } else if (this.tiempoRestantePausa === 60 && !this.avisoComida1MinDado) {
         this.avisoComida1MinDado = true;
-        this.notificar('⚠️ ¡Falta 1 MINUTO! Prepárate para presionar Reanudar Turno.', 'alerta');
+        this.notificar('⚠️ ¡Falta 1 MINUTO! Prepárate para presionar Terminar Comida.', 'alerta');
       }
     } else {
       this.tiempoRestantePausa = 0;
@@ -393,8 +393,21 @@ export class App implements OnInit, OnDestroy {
 
   esActividadRegistrada(reg?: Registro): boolean {
     if (!reg) return false;
+    if (reg.actividades && reg.actividades.length > 0) return true;
     if (reg.actividadRegistrada) return true;
     return !!reg.observacion && !reg.observacion.toLowerCase().includes('pendiente');
+  }
+
+  get actividadesTurnoActivo(): ActividadItem[] {
+    const reg = this.registroActivo;
+    if (!reg) return [];
+    if (reg.actividades && reg.actividades.length > 0) {
+      return reg.actividades;
+    }
+    if (this.esActividadRegistrada(reg)) {
+      return [{ hora: reg.horaEntrada, texto: reg.observacion }];
+    }
+    return [];
   }
 
   irAAuth(tab: 'login' | 'registro'): void {
@@ -473,7 +486,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- REGISTRO Y LOGIN ---
+  // --- REGISTRO Y LOGIN CON SESIÓN INDEPENDIENTE POR PESTAÑA (sessionStorage) ---
   async ejecutarRegistro(): Promise<void> {
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
       this.notificar('Completa tu nombre, correo y contraseña', 'alerta');
@@ -575,7 +588,9 @@ export class App implements OnInit, OnDestroy {
     this.usuarioActual = { ...usuario };
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
-    localStorage.setItem('ticktock_user', JSON.stringify(this.usuarioActual));
+    // sessionStorage mantiene cada pestaña aislada en el mismo navegador Chrome
+    sessionStorage.setItem('ticktock_user_tab', JSON.stringify(this.usuarioActual));
+    localStorage.removeItem('ticktock_user');
     this.recalcularCronometros();
     this.cdr.detectChanges();
   }
@@ -584,13 +599,16 @@ export class App implements OnInit, OnDestroy {
     this.usuarioActual = null;
     this.sesionIniciada = false;
     this.pantallaActual = 'bienvenida';
+    sessionStorage.removeItem('ticktock_user_tab');
     localStorage.removeItem('ticktock_user');
-    this.notificar('Sesión cerrada', 'info');
+    this.notificar('Sesión cerrada en esta pestaña', 'info');
     this.cdr.detectChanges();
   }
 
   cargarSesionGuardada(): void {
-    const raw = localStorage.getItem('ticktock_user');
+    // Limpiamos cualquier sesión compartida vieja para evitar cruces entre pestañas
+    localStorage.removeItem('ticktock_user');
+    const raw = sessionStorage.getItem('ticktock_user_tab');
     if (raw) {
       try {
         const user = JSON.parse(raw);
@@ -600,7 +618,7 @@ export class App implements OnInit, OnDestroy {
           this.pantallaActual = 'dashboard';
         }
       } catch {
-        localStorage.removeItem('ticktock_user');
+        sessionStorage.removeItem('ticktock_user_tab');
       }
     }
   }
@@ -675,6 +693,13 @@ export class App implements OnInit, OnDestroy {
   get estaEnTurno(): boolean { return this.registroActivo?.estado === 'En Turno'; }
   get estaEnPausa(): boolean { return this.registroActivo?.estado === 'En Pausa'; }
 
+  // Devuelve true si el estudiante ya tomó y finalizó su única comida de la jornada
+  get comidaYaUtilizada(): boolean {
+    const reg = this.registroActivo;
+    if (!reg) return false;
+    return !!(reg.comidaTerminada || (reg.horaPausaInicio && reg.horaPausaFin));
+  }
+
   private async obtenerIdRealRegistro(reg: Registro): Promise<string | null> {
     if (reg.id && !reg.id.startsWith('temp_')) return reg.id;
     const encontrado = this.registros.find(
@@ -698,11 +723,18 @@ export class App implements OnInit, OnDestroy {
 
     const ahora = new Date();
     const ahoraMs = ahora.getTime();
+    const horaStr = ahora.toLocaleTimeString('es-ES');
     const mesAno = ahora.toISOString().substring(0, 7);
     const pin = 'TK-' + Math.floor(100000 + Math.random() * 900000);
-    const tieneActividadInicial = this.observacionActual.trim().length > 0;
-    const textoActividad = tieneActividadInicial
-      ? this.observacionActual.trim()
+
+    const textoInicial = this.observacionActual.trim();
+    const tieneActividadInicial = textoInicial.length > 0;
+    const listaActividadesInicial: ActividadItem[] = tieneActividadInicial
+      ? [{ hora: horaStr, texto: textoInicial }]
+      : [];
+
+    const resumenObservacion = tieneActividadInicial
+      ? `[${horaStr}] ${textoInicial}`
       : 'Pendiente de registrar actividad';
 
     const nuevo: Registro = {
@@ -713,10 +745,12 @@ export class App implements OnInit, OnDestroy {
       departamento: this.usuarioActual.departamento || 'General',
       fecha: ahora.toLocaleDateString('es-ES'),
       mesAno,
-      horaEntrada: ahora.toLocaleTimeString('es-ES'),
+      horaEntrada: horaStr,
       estado: 'En Turno',
-      observacion: textoActividad,
+      observacion: resumenObservacion,
+      actividades: listaActividadesInicial,
       actividadRegistrada: tieneActividadInicial,
+      comidaTerminada: false,
       timestampEntrada: ahoraMs,
       timestampQR: ahoraMs,
       codigoQR: pin,
@@ -862,7 +896,7 @@ export class App implements OnInit, OnDestroy {
             }
           }
         } catch {
-          // Seguir con jsQR
+          // Continuar con jsQR
         }
       }
 
@@ -1011,7 +1045,8 @@ export class App implements OnInit, OnDestroy {
           this.notificar(`✅ ¡Asistencia verificada con QR a las ${horaExacta}!`, 'exito');
           return;
         } else if (this.usuarioActual) {
-          const tieneAct = this.observacionActual.trim().length > 0;
+          const textoIni = this.observacionActual.trim();
+          const tieneAct = textoIni.length > 0;
           const nuevo: Registro = {
             empleadoId: String(this.usuarioActual.correo).toLowerCase(),
             empleadoNombre: this.usuarioActual.nombre,
@@ -1021,8 +1056,10 @@ export class App implements OnInit, OnDestroy {
             mesAno: ahora.toISOString().substring(0, 7),
             horaEntrada: horaExacta,
             estado: 'En Turno',
-            observacion: tieneAct ? this.observacionActual.trim() : 'Pendiente de registrar actividad',
+            observacion: tieneAct ? `[${horaExacta}] ${textoIni}` : 'Pendiente de registrar actividad',
+            actividades: tieneAct ? [{ hora: horaExacta, texto: textoIni }] : [],
             actividadRegistrada: tieneAct,
+            comidaTerminada: false,
             timestampEntrada: ahoraMs,
             timestampQR: this.qrKioscoActivo.timestamp,
             codigoQR: this.qrKioscoActivo.codigo,
@@ -1079,14 +1116,20 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- PAUSA COMIDA Y REANUDAR ---
+  // --- PAUSA COMIDA DE UN SOLO USO POR JORNADA ---
   async conmutarPausa(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg) {
-      this.notificar('No tienes un turno activo para pausar', 'alerta');
+      this.notificar('No tienes un turno activo', 'alerta');
       return;
     }
     if (this.cargandoAccion) return;
+
+    // Bloquear si ya tomó y finalizó su única comida de la jornada
+    if (reg.estado === 'En Turno' && this.comidaYaUtilizada) {
+      this.notificar('⚠️ Ya utilizaste tu única comida permitida en esta jornada.', 'alerta');
+      return;
+    }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
@@ -1107,14 +1150,23 @@ export class App implements OnInit, OnDestroy {
 
       const minsComida = Number(this.empresa.duracionComidaMinutos) || 45;
       this.recalcularCronometros();
-      this.notificar(`☕ Pausa de comida iniciada (${horaActual}). Tienes ${minsComida} min.`, 'info');
+      this.notificar(`☕ Comida iniciada (${horaActual}). Tienes ${minsComida} min (uso único).`, 'info');
     } else {
+      const segundosUsados = reg.timestampPausaInicio
+        ? Math.max(1, Math.floor((ahora.getTime() - reg.timestampPausaInicio) / 1000))
+        : 0;
+
       reg.estado = 'En Turno';
       reg.horaPausaFin = horaActual;
+      reg.comidaTerminada = true;
+      reg.segundosComidaUsados = segundosUsados;
+
       datosActualizar.horaPausaFin = horaActual;
+      datosActualizar.comidaTerminada = true;
+      datosActualizar.segundosComidaUsados = segundosUsados;
 
       this.recalcularCronometros();
-      this.notificar(`▶️ Turno reanudado a las ${horaActual}.`, 'exito');
+      this.notificar(`✅ Comida finalizada a las ${horaActual}. Turno reanudado.`, 'exito');
     }
 
     try {
@@ -1123,31 +1175,49 @@ export class App implements OnInit, OnDestroy {
         await this.registroService.actualizarRegistro(idReal, datosActualizar);
       }
     } catch (err) {
-      console.error('Error al cambiar estado de pausa:', err);
-      this.notificar('Error al actualizar el estado de pausa', 'alerta');
+      console.error('Error al actualizar estado de comida:', err);
+      this.notificar('Error al actualizar estado de comida', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
     }
   }
 
+  // --- AGREGAR NUEVA ACTIVIDAD / TAREA SIN BORRAR LAS ANTERIORES ---
   async actualizarActividad(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg) {
-      this.notificar('Primero marca tu entrada para guardar tu actividad', 'alerta');
+      this.notificar('Primero marca tu entrada para registrar tareas', 'alerta');
       return;
     }
 
-    if (!this.observacionActual.trim()) {
-      this.notificar('Escribe la actividad realizada para guardarla', 'alerta');
+    const textoNuevaTarea = this.observacionActual.trim();
+    if (!textoNuevaTarea) {
+      this.notificar('Escribe la nueva tarea o actividad para agregarla', 'alerta');
       return;
     }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
 
-    const nuevaActividad = this.observacionActual.trim();
-    reg.observacion = nuevaActividad;
+    const horaRegistro = new Date().toLocaleTimeString('es-ES');
+
+    // Conservar todas las actividades anteriores y añadir la nueva al final
+    const listaPrevias: ActividadItem[] = (reg.actividades && reg.actividades.length > 0)
+      ? [...reg.actividades]
+      : (this.esActividadRegistrada(reg) ? [{ hora: reg.horaEntrada, texto: reg.observacion }] : []);
+
+    const listaActualizada: ActividadItem[] = [
+      ...listaPrevias,
+      { hora: horaRegistro, texto: textoNuevaTarea }
+    ];
+
+    const resumenCompleto = listaActualizada
+      .map(item => `[${item.hora}] ${item.texto}`)
+      .join(' | ');
+
+    reg.actividades = listaActualizada;
+    reg.observacion = resumenCompleto;
     reg.actividadRegistrada = true;
     this.observacionActual = '';
     this.recalcularCronometros();
@@ -1156,13 +1226,15 @@ export class App implements OnInit, OnDestroy {
       const idReal = await this.obtenerIdRealRegistro(reg);
       if (idReal) {
         await this.registroService.actualizarRegistro(idReal, {
-          observacion: nuevaActividad,
+          actividades: listaActualizada,
+          observacion: resumenCompleto,
           actividadRegistrada: true
         });
       }
-      this.notificar('✅ Actividad guardada correctamente', 'exito');
+      this.notificar(`✅ Tarea #${listaActualizada.length} agregada sin borrar las anteriores`, 'exito');
     } catch (e) {
       console.error(e);
+      this.notificar('Error al guardar la tarea en la nube', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -1233,7 +1305,7 @@ export class App implements OnInit, OnDestroy {
 
   exportarSoloActividades(): void {
     if (!this.empresa.habilitarReporteInformes) return;
-    let csv = '\uFEFFID,Estudiante,Departamento,Fecha,Actividad Inicial,Reporte Final\n';
+    let csv = '\uFEFFID,Estudiante,Departamento,Fecha,Tareas y Actividades Registradas,Reporte Final\n';
     this.registrosFiltrados.forEach(r => {
       csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
     });
@@ -1242,7 +1314,7 @@ export class App implements OnInit, OnDestroy {
 
   exportarReporteCompleto(): void {
     if (!this.empresa.habilitarReporteCompleto) return;
-    let csv = '\uFEFFID,Empresa,Ubicacion,Estudiante,Departamento,Fecha,Entrada,Escaneo QR,Inicio Comida,Fin Comida,Salida,Estado,PIN QR,Actividad,Reporte Final\n';
+    let csv = '\uFEFFID,Empresa,Ubicacion,Estudiante,Departamento,Fecha,Entrada,Escaneo QR,Inicio Comida,Fin Comida,Salida,Estado,PIN QR,Tareas y Actividades,Reporte Final\n';
     this.registrosFiltrados.forEach(r => {
       csv += `"${r.id || ''}","${this.empresa.nombre}","${this.empresa.ubicacion}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaEscaneoQR || 'Sin escanear'}","${r.horaPausaInicio || '--'}","${r.horaPausaFin || '--'}","${r.horaSalida || 'En turno'}","${r.estado}","${r.codigoQR || ''}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
     });

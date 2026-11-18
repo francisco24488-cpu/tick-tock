@@ -143,7 +143,7 @@ textarea::placeholder {
   cursor: pointer;
 }
 
-/* ==================== VISTA LIMPIA DE ESTUDIANTE ==================== */
+/* ==================== VISTA ESTUDIANTE Y TAREAS ACUMULABLES ==================== */
 .student-profile-banner {
   display: flex;
   justify-content: space-between;
@@ -216,6 +216,66 @@ textarea::placeholder {
   box-shadow: 0 4px 12px var(--primary-border);
 }
 
+.tasks-accumulated-box {
+  margin-top: 0.9rem;
+  background: #ffffff;
+  border: 1px solid var(--primary-border);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
+.tasks-accumulated-title {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+  margin-bottom: 0.5rem;
+}
+
+.tasks-accumulated-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.tasks-accumulated-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 0.45rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  color: #1e293b;
+}
+
+.task-num {
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+}
+
+.task-time {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.task-text {
+  font-weight: 600;
+}
+
+.activities-cell {
+  max-width: 280px;
+  line-height: 1.4;
+}
+
 .student-main-actions {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -241,7 +301,7 @@ textarea::placeholder {
 }
 
 .btn-student-hero:disabled {
-  opacity: 0.45;
+  opacity: 0.58;
   cursor: not-allowed;
 }
 
@@ -264,6 +324,18 @@ textarea::placeholder {
   background: #ffffff;
   color: var(--primary-dark);
   border: 2px solid var(--primary);
+}
+
+.btn-green-finish {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  color: #ffffff;
+}
+
+.btn-meal-used {
+  background: #e2e8f0;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+  box-shadow: none;
 }
 
 .compact-timers-strip {

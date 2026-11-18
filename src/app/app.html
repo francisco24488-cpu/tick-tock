@@ -394,7 +394,6 @@
           🔄 Actualizar Lista
         </button>
 
-        <!-- BARRA RÁPIDA DE COLORES PARA EL ADMIN (SIN BOTÓN QR) -->
         <div class="quick-theme-bar" *ngIf="usuarioActual.rol === 'admin'">
           <span>🎨 Color:</span>
           <button
@@ -417,7 +416,7 @@
     </div>
 
     <main class="main-content">
-      <!-- ==================== VISTA ALUMNO / ESTUDIANTE (REDISEÑADA Y LIMPIA) ==================== -->
+      <!-- ==================== VISTA ALUMNO / ESTUDIANTE ==================== -->
       <section class="card student-card-clean" *ngIf="usuarioActual.rol !== 'admin'">
         <!-- Cabecera de Estado del Estudiante -->
         <div class="student-profile-banner">
@@ -440,27 +439,42 @@
 
         <!-- Panel Principal de Acciones del Estudiante -->
         <div class="student-workspace-box">
-          <!-- Paso 1: Registro de Actividad con botón integrado -->
+          <!-- Nueva Actividad / Tarea acumulable sin borrar anteriores -->
           <div class="activity-inline-box">
-            <label>📝 Actividad de tu jornada:</label>
+            <label>📝 Nueva Actividad / Tarea:</label>
             <div class="activity-inline-row">
               <input
                 type="text"
                 class="input-clean"
                 [(ngModel)]="observacionActual"
-                placeholder="Escribe qué actividad realizarás hoy...">
+                (keyup.enter)="estaEnTurno || estaEnPausa ? actualizarActividad() : null"
+                placeholder="Escribe una tarea o actividad para registrarla (no borra las anteriores)...">
               <button
                 type="button"
                 class="btn-save-inline"
                 *ngIf="estaEnTurno || estaEnPausa"
                 (click)="actualizarActividad()"
                 [disabled]="cargandoAccion">
-                💾 Guardar
+                ➕ Agregar Tarea
               </button>
+            </div>
+
+            <!-- Lista de tareas ya registradas en la jornada actual -->
+            <div class="tasks-accumulated-box" *ngIf="(estaEnTurno || estaEnPausa) && actividadesTurnoActivo.length > 0">
+              <div class="tasks-accumulated-title">
+                ✅ Tareas registradas en este turno ({{ actividadesTurnoActivo.length }}):
+              </div>
+              <ul class="tasks-accumulated-list">
+                <li *ngFor="let act of actividadesTurnoActivo; let idx = index">
+                  <span class="task-num">#{{ idx + 1 }}</span>
+                  <span class="task-time">🕒 {{ act.hora }}</span>
+                  <span class="task-text">{{ act.texto }}</span>
+                </li>
+              </ul>
             </div>
           </div>
 
-          <!-- Paso 2: Botones Principales Claros -->
+          <!-- Botones Principales Claros -->
           <div class="student-main-actions">
             <!-- Cuando aún NO inicia turno -->
             <ng-container *ngIf="!estaEnTurno && !estaEnPausa">
@@ -514,15 +528,25 @@
                 </div>
               </button>
 
+              <!-- Botón Comida de un solo uso por jornada -->
               <button
                 type="button"
-                class="btn-student-hero btn-amber"
+                class="btn-student-hero"
+                [ngClass]="estaEnPausa ? 'btn-green-finish' : (comidaYaUtilizada ? 'btn-meal-used' : 'btn-amber')"
                 (click)="conmutarPausa()"
-                [disabled]="cargandoAccion">
-                <span class="btn-big-icon">{{ estaEnPausa ? '▶️' : '☕' }}</span>
+                [disabled]="cargandoAccion || (!estaEnPausa && comidaYaUtilizada)">
+                <span class="btn-big-icon">{{ estaEnPausa ? '✅' : (comidaYaUtilizada ? '🔒' : '☕') }}</span>
                 <div>
-                  <strong>{{ estaEnPausa ? 'Reanudar Turno' : 'Pausa Comida' }}</strong>
-                  <small>{{ estaEnPausa ? 'Regresar a trabajar' : empresa.duracionComidaMinutos + ' min disponibles' }}</small>
+                  <strong>
+                    {{ estaEnPausa ? 'Terminar Comida' : (comidaYaUtilizada ? 'Comida Finalizada' : 'Iniciar Comida') }}
+                  </strong>
+                  <small>
+                    {{ estaEnPausa
+                        ? 'Regresar de comida'
+                        : (comidaYaUtilizada
+                            ? 'Ya usaste tu comida (' + registroActivo?.horaPausaInicio + ' - ' + registroActivo?.horaPausaFin + ')'
+                            : empresa.duracionComidaMinutos + ' min • 1 vez por jornada') }}
+                  </small>
                 </div>
               </button>
 
@@ -548,13 +572,21 @@
             </div>
 
             <div class="mini-timer-pill" [class.pill-ok]="esActividadRegistrada(registroActivo)" [class.pill-warn]="(estaEnTurno || estaEnPausa) && !esActividadRegistrada(registroActivo)">
-              <span>📝 Actividad:</span>
-              <strong>{{ esActividadRegistrada(registroActivo) ? 'Guardada' : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteActividad) : '10:00 min') }}</strong>
+              <span>📝 Tareas:</span>
+              <strong>
+                {{ esActividadRegistrada(registroActivo)
+                    ? actividadesTurnoActivo.length + ' registrada(s)'
+                    : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteActividad) : '10:00 min') }}
+              </strong>
             </div>
 
-            <div class="mini-timer-pill" [class.pill-warn]="estaEnPausa">
+            <div class="mini-timer-pill" [class.pill-warn]="estaEnPausa" [class.pill-ok]="comidaYaUtilizada">
               <span>🍱 Comida:</span>
-              <strong>{{ estaEnPausa ? formatearSegundos(tiempoRestantePausa) : empresa.duracionComidaMinutos + ' min' }}</strong>
+              <strong>
+                <ng-container *ngIf="estaEnPausa">{{ formatearSegundos(tiempoRestantePausa) }}</ng-container>
+                <ng-container *ngIf="!estaEnPausa && comidaYaUtilizada">Finalizada ({{ registroActivo?.horaPausaInicio }} - {{ registroActivo?.horaPausaFin }})</ng-container>
+                <ng-container *ngIf="!estaEnPausa && !comidaYaUtilizada">{{ empresa.duracionComidaMinutos }} min (Disponible)</ng-container>
+              </strong>
             </div>
           </div>
         </div>
@@ -572,7 +604,7 @@
                   <th>Comida</th>
                   <th>Salida</th>
                   <th>Estado</th>
-                  <th>Actividad</th>
+                  <th>Tareas / Actividades</th>
                 </tr>
               </thead>
               <tbody>
@@ -591,7 +623,7 @@
                       {{ reg.estado }}
                     </span>
                   </td>
-                  <td>{{ reg.observacion }}</td>
+                  <td class="activities-cell">{{ reg.observacion }}</td>
                 </tr>
                 <tr *ngIf="misRegistrosEstudiante.length === 0">
                   <td colspan="7" class="empty-row">Aún no tienes registros de asistencia.</td>
@@ -713,7 +745,7 @@
         </div>
 
         <div class="filter-bar margin-top">
-          <input type="text" class="search-clean" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar marcaje por alumno, área o actividad...">
+          <input type="text" class="search-clean" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar marcaje por alumno, área o tarea...">
           <select class="select-clean fit-content" [(ngModel)]="filtroEstado">
             <option value="TODOS">Todos los estados</option>
             <option value="En Turno">🟢 En Turno</option>
@@ -735,7 +767,7 @@
                 <th>Comida</th>
                 <th>Salida</th>
                 <th>Estado</th>
-                <th>Actividad</th>
+                <th>Tareas / Actividades</th>
                 <th>Acción</th>
               </tr>
             </thead>
@@ -758,7 +790,7 @@
                     {{ reg.estado }}
                   </span>
                 </td>
-                <td>{{ reg.observacion }}</td>
+                <td class="activities-cell">{{ reg.observacion }}</td>
                 <td><button type="button" class="btn-delete-row" (click)="eliminarRegistro(reg.id)">🗑️</button></td>
               </tr>
               <tr *ngIf="registrosFiltrados.length === 0">

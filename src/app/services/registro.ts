@@ -54,6 +54,11 @@ export interface Usuario {
   matricula?: string;
 }
 
+export interface ActividadItem {
+  hora: string;
+  texto: string;
+}
+
 export interface Registro {
   id?: string;
   empleadoId: string;
@@ -67,9 +72,12 @@ export interface Registro {
   horaPausaInicio?: string;
   horaPausaFin?: string;
   timestampPausaInicio?: number;
+  comidaTerminada?: boolean;
+  segundosComidaUsados?: number;
   totalHoras?: string;
   estado: 'En Turno' | 'En Pausa' | 'Completado';
   observacion: string;
+  actividades?: ActividadItem[];
   actividadRegistrada?: boolean;
   reporteFinal?: string;
   timestampEntrada?: number;
