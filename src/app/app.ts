@@ -31,7 +31,11 @@ export class App implements OnInit, OnDestroy {
     habilitarFormEstudiantes: true,
     habilitarReporteHoras: true,
     habilitarReporteInformes: true,
-    habilitarReporteCompleto: true
+    habilitarReporteCompleto: true,
+    departamentosPersonalizados: [],
+    emailjsServiceId: '',
+    emailjsTemplateId: '',
+    emailjsPublicKey: ''
   };
 
   temasDisponibles = [
@@ -67,12 +71,27 @@ export class App implements OnInit, OnDestroy {
     '11:00 de la noche'
   ];
 
+  departamentosBase = [
+    'General',
+    'Administración',
+    'Desarrollo & TI',
+    'Operaciones',
+    'Ventas & Marketing',
+    'Servicio Social',
+    'Recursos Humanos',
+    'Contabilidad y Finanzas',
+    'Diseño y Comunicación',
+    'Soporte Técnico',
+    'Logística'
+  ];
+
   // Formularios Auth
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
   formRol: 'estudiante' | 'admin' = 'estudiante';
   formDepartamento: string = 'General';
+  formDepartamentoPersonalizado: string = '';
   formAvatar: string = '🧑‍💻';
   formEmpresaNombre: string = '';
   formSucursal: string = '';
@@ -82,15 +101,35 @@ export class App implements OnInit, OnDestroy {
   formTelefono: string = '';
   formMatricula: string = '';
 
-  // Modal Nuevo Estudiante
+  // Modal Nuevo Estudiante (Admin)
   mostrarModalNuevoEstudiante: boolean = false;
   adminNuevoNombre: string = '';
   adminNuevoCorreo: string = '';
   adminNuevoPassword: string = '';
   adminNuevoDept: string = 'General';
+  adminNuevoDeptPersonalizado: string = '';
   adminNuevoAvatar: string = '🧑‍💻';
   adminNuevoTel: string = '';
   adminNuevoMatricula: string = '';
+
+  // Modal Editar Estudiante (Admin)
+  mostrarModalEditarEstudiante: boolean = false;
+  editEstudianteId: string = '';
+  editEstudianteNombre: string = '';
+  editEstudianteMatricula: string = '';
+  editEstudianteCorreo: string = '';
+  editEstudianteTelefono: string = '';
+  editEstudianteDept: string = 'General';
+  editEstudianteDeptPersonalizado: string = '';
+  editEstudiantePassword: string = '';
+
+  // Verificación de 2 Pasos por Gmail ("¿Eres tú?")
+  mostrarModalVerificacionGmail: boolean = false;
+  usuarioPendienteVerificacion: Usuario | null = null;
+  codigoVerificacionIngresado: string = '';
+  enlaceVerificacionGenerado: string = '';
+  enviandoCorreoGmail: boolean = false;
+  mensajeExitoVerificacionLink: string = '';
 
   // QR & Cámara Real
   mostrarModalQR: boolean = false;
@@ -140,20 +179,26 @@ export class App implements OnInit, OnDestroy {
   mensajeToast: string = '';
   tipoToast: 'exito' | 'alerta' | 'info' = 'exito';
 
-  departamentos = ['General', 'Administración', 'Desarrollo & TI', 'Operaciones', 'Ventas & Marketing', 'Servicio Social'];
-
   constructor(
     private registroService: RegistroService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  get listaDepartamentosCompleta(): string[] {
+    const personalizados = this.empresa.departamentosPersonalizados || [];
+    const combinados = [...this.departamentosBase, ...personalizados];
+    return Array.from(new Set(combinados.filter(d => d && d.trim().length > 0)));
+  }
 
   ngOnInit(): void {
     this.cargarLibreriasQR();
     this.cargarConfiguracionLocal();
     this.cargarSesionGuardada();
     this.iniciarRelojYCronometros();
+    this.procesarEnlaceVerificacionGmail();
     this.recargarDatosDesdeNube(false);
 
+    // Suscripción en tiempo real a colores y configuración de empresa
     this.registroService.getEmpresaConfig().subscribe({
       next: (cfg) => {
         if (cfg) {
@@ -171,18 +216,45 @@ export class App implements OnInit, OnDestroy {
       error: (err) => console.error('Error QR kiosco:', err)
     });
 
+    // Suscripción en tiempo real a registros (detecta al instante cuando escaneas el QR con el celular)
     this.registroService.getRegistros().subscribe({
       next: (data: Registro[]) => {
+        const previoVerificado = this.registroActivo?.verificadoCamaraMovil;
         this.registros = (data || []).sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
+        const actualVerificado = this.registroActivo?.verificadoCamaraMovil;
+
+        // Si el QR acaba de ser escaneado desde el celular, cerrar el modal QR en la PC al instante
+        if (!previoVerificado && actualVerificado && this.mostrarModalQR) {
+          this.mostrarModalQR = false;
+          this.notificar(`✅ ¡Código QR escaneado a las ${this.registroActivo?.horaEscaneoQR}!`, 'exito');
+        }
+
         this.recalcularCronometros();
         this.cdr.detectChanges();
       },
       error: (err: any) => console.error('Error registros:', err)
     });
 
+    // Suscripción en tiempo real a usuarios (detecta al instante cuando confirman "Sí, soy yo" en Gmail)
     this.registroService.getUsuarios().subscribe({
       next: (data: Usuario[]) => {
         this.usuariosSistema = data || [];
+
+        if (this.mostrarModalVerificacionGmail && this.usuarioPendienteVerificacion) {
+          const actualizado = this.usuariosSistema.find(
+            u => u.correo.toLowerCase() === this.usuarioPendienteVerificacion!.correo.toLowerCase()
+          );
+          if (actualizado && actualizado.verificadoCorreo) {
+            this.mostrarModalVerificacionGmail = false;
+            const eraAutoregistro = !this.sesionIniciada;
+            this.usuarioPendienteVerificacion = null;
+            this.notificar('✅ ¡Correo verificado en Gmail! Registro completado.', 'exito');
+            if (eraAutoregistro) {
+              this.iniciarSesionUsuario(actualizado);
+            }
+          }
+        }
+
         this.cdr.detectChanges();
       },
       error: (err: any) => console.error('Error usuarios:', err)
@@ -194,7 +266,29 @@ export class App implements OnInit, OnDestroy {
     this.detenerCamara();
   }
 
-  // --- GESTIÓN GLOBAL DE COLORES ---
+  // --- PROCESAR ENLACE DE VERIFICACIÓN EN 2 PASOS ("¿Eres tú?") DESDE GMAIL ---
+  private async procesarEnlaceVerificacionGmail(): Promise<void> {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('verificar');
+    if (!token) return;
+
+    // Limpiar el parámetro de la URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    const verificado = await this.registroService.verificarUsuarioPorToken(token);
+    if (verificado) {
+      this.mensajeExitoVerificacionLink = `✅ ¡Identidad confirmada! El correo ${verificado.correo} ha sido verificado ("Sí, soy yo"). Ya puedes usar TickTock.`;
+      this.notificar(`✅ Correo ${verificado.correo} verificado correctamente`, 'exito');
+      if (!this.sesionIniciada) {
+        this.iniciarSesionUsuario(verificado);
+      }
+      this.cdr.detectChanges();
+    } else {
+      this.notificar('⚠️ El enlace de verificación no es válido o ya expiró', 'alerta');
+    }
+  }
+
+  // --- GESTIÓN GLOBAL DE COLORES EN TIEMPO REAL ---
   get temaEstilos(): { [key: string]: string } {
     const primary = this.empresa.colorTema || '#f97316';
     const dark = this.oscurecerHex(primary, 18);
@@ -235,7 +329,8 @@ export class App implements OnInit, OnDestroy {
     this.empresa = {
       ...this.empresa,
       ...cfg,
-      colorTema: cfg.colorTema || this.empresa.colorTema || '#f97316'
+      colorTema: cfg.colorTema || this.empresa.colorTema || '#f97316',
+      departamentosPersonalizados: cfg.departamentosPersonalizados || this.empresa.departamentosPersonalizados || []
     };
     this.aplicarVariablesGlobalesCSS(this.empresa.colorTema!);
     localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
@@ -268,10 +363,26 @@ export class App implements OnInit, OnDestroy {
 
     try {
       await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('🎨 Color actualizado para toda la página', 'exito');
+      this.notificar('🎨 Color actualizado al instante para todos', 'exito');
     } catch (e) {
       console.error('Error guardando color en Firebase:', e);
-      this.notificar('⚠️ Color aplicado localmente, revisa permisos de Firebase', 'alerta');
+      this.notificar('⚠️ Color aplicado localmente, revisa conexión', 'alerta');
+    }
+  }
+
+  private async registrarDepartamentoSiEsNuevo(nombreDepto: string): Promise<void> {
+    const limpio = nombreDepto.trim();
+    if (!limpio) return;
+    const existe = this.listaDepartamentosCompleta.some(d => d.toLowerCase() === limpio.toLowerCase());
+    if (!existe) {
+      const actuales = this.empresa.departamentosPersonalizados || [];
+      this.empresa.departamentosPersonalizados = [...actuales, limpio];
+      localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
+      try {
+        await this.registroService.guardarEmpresaConfig(this.empresa);
+      } catch (e) {
+        console.error('Error guardando departamento personalizado:', e);
+      }
     }
   }
 
@@ -296,7 +407,7 @@ export class App implements OnInit, OnDestroy {
       this.recalcularCronometros();
       this.cdr.detectChanges();
       if (mostrarAviso) {
-        this.notificar(`🔄 Datos y colores sincronizados (${this.totalEstudiantes} alumnos)`, 'info');
+        this.notificar(`🔄 Datos sincronizados (${this.totalEstudiantes} alumnos)`, 'info');
       }
     } catch (e) {
       console.error('Error sincronizando datos:', e);
@@ -421,12 +532,120 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- GESTIÓN DE ALUMNOS (ADMIN) ---
+  // --- ENVÍO DE CORREO GMAIL DE VERIFICACIÓN EN 2 PASOS ("¿Eres tú?") ---
+  private async iniciarFlujoVerificacionGmail(usuario: Usuario): Promise<void> {
+    const origen = window.location.origin;
+    const enlace = `${origen}/?verificar=${encodeURIComponent(usuario.tokenVerificacion || '')}`;
+
+    this.usuarioPendienteVerificacion = usuario;
+    this.enlaceVerificacionGenerado = enlace;
+    this.codigoVerificacionIngresado = '';
+    this.mostrarModalVerificacionGmail = true;
+    this.cdr.detectChanges();
+
+    // Si el Admin configuró EmailJS, enviamos el correo automáticamente a Gmail
+    if (this.empresa.emailjsServiceId && this.empresa.emailjsTemplateId && this.empresa.emailjsPublicKey) {
+      this.enviandoCorreoGmail = true;
+      this.cdr.detectChanges();
+      try {
+        await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id: this.empresa.emailjsServiceId.trim(),
+            template_id: this.empresa.emailjsTemplateId.trim(),
+            user_id: this.empresa.emailjsPublicKey.trim(),
+            template_params: {
+              to_email: usuario.correo,
+              to_name: usuario.nombre,
+              app_name: this.empresa.nombre || 'TickTock',
+              verification_link: enlace,
+              verification_code: usuario.codigoVerificacion,
+              message: `¿Eres tú la persona que se está registrando en ${this.empresa.nombre || 'TickTock'}? Haz clic en "Sí, soy yo" en el enlace: ${enlace} o usa el código ${usuario.codigoVerificacion}`
+            }
+          })
+        });
+        this.notificar(`📧 Correo de confirmación enviado a ${usuario.correo}`, 'exito');
+      } catch (e) {
+        console.error('Error enviando correo automático:', e);
+      } finally {
+        this.enviandoCorreoGmail = false;
+        this.cdr.detectChanges();
+      }
+    }
+  }
+
+  abrirGmailParaConfirmar(): void {
+    if (!this.usuarioPendienteVerificacion) return;
+    const u = this.usuarioPendienteVerificacion;
+    const asunto = encodeURIComponent(`¿Eres tú? Confirma tu registro en ${this.empresa.nombre || 'TickTock'}`);
+    const cuerpo = encodeURIComponent(
+      `Hola ${u.nombre},\n\n` +
+      `Se ha iniciado un registro con tu correo (${u.correo}) en la plataforma ${this.empresa.nombre || 'TickTock'}.\n\n` +
+      `¿Eres tú la persona que se está registrando?\n` +
+      `👉 Haz clic aquí para confirmar ("Sí, soy yo"):\n${this.enlaceVerificacionGenerado}\n\n` +
+      `O ingresa este código de verificación en la página: ${u.codigoVerificacion}\n\n` +
+      `Si no fuiste tú, ignora este mensaje.`
+    );
+    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(u.correo)}&su=${asunto}&body=${cuerpo}`, '_blank');
+  }
+
+  async confirmarCodigoVerificacion2Pasos(): Promise<void> {
+    if (!this.usuarioPendienteVerificacion) return;
+    const codigoLimpio = this.codigoVerificacionIngresado.trim();
+
+    if (!codigoLimpio || codigoLimpio !== this.usuarioPendienteVerificacion.codigoVerificacion) {
+      this.notificar('❌ El código de verificación no coincide. Revisa el correo Gmail.', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    this.cdr.detectChanges();
+
+    try {
+      const u = this.usuarioPendienteVerificacion;
+      if (u.id) {
+        await this.registroService.actualizarUsuario(u.id, { verificadoCorreo: true });
+      }
+      u.verificadoCorreo = true;
+      this.usuariosSistema = this.usuariosSistema.map(item =>
+        item.correo.toLowerCase() === u.correo.toLowerCase() ? { ...item, verificadoCorreo: true } : item
+      );
+
+      const eraAutoregistro = !this.sesionIniciada;
+      this.mostrarModalVerificacionGmail = false;
+      this.usuarioPendienteVerificacion = null;
+      this.notificar('✅ ¡Sí, soy yo confirmado! Registro verificado con éxito.', 'exito');
+
+      if (eraAutoregistro) {
+        this.iniciarSesionUsuario(u);
+      }
+    } catch (e) {
+      console.error(e);
+      this.notificar('Error al confirmar verificación', 'alerta');
+    } finally {
+      this.cargandoAccion = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  cerrarModalVerificacionGmail(): void {
+    this.mostrarModalVerificacionGmail = false;
+    this.usuarioPendienteVerificacion = null;
+    this.cdr.detectChanges();
+  }
+
+  reenviarVerificacionAlumno(alumno: Usuario): void {
+    this.iniciarFlujoVerificacionGmail(alumno);
+  }
+
+  // --- GESTIÓN DE ALUMNOS (ADMIN: ALTA Y EDICIÓN COMPLETA) ---
   abrirModalNuevoEstudiante(): void {
     this.adminNuevoNombre = '';
     this.adminNuevoCorreo = '';
     this.adminNuevoPassword = '';
     this.adminNuevoDept = 'General';
+    this.adminNuevoDeptPersonalizado = '';
     this.adminNuevoAvatar = '🧑‍💻';
     this.adminNuevoTel = '';
     this.adminNuevoMatricula = '';
@@ -445,6 +664,15 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
+    const deptoFinal = this.adminNuevoDept === '__OTRO__'
+      ? this.adminNuevoDeptPersonalizado.trim()
+      : this.adminNuevoDept;
+
+    if (!deptoFinal) {
+      this.notificar('Escribe el nombre del departamento o área', 'alerta');
+      return;
+    }
+
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const correoNorm = this.adminNuevoCorreo.trim().toLowerCase();
@@ -456,27 +684,36 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
+      await this.registrarDepartamentoSiEsNuevo(deptoFinal);
+
+      const token = 'VRF-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const codigo6 = Math.floor(100000 + Math.random() * 900000).toString();
+
       const nuevoEstudiante: Usuario = {
         nombre: this.adminNuevoNombre.trim(),
         correo: correoNorm,
         password: this.adminNuevoPassword.trim(),
         rol: 'estudiante',
-        departamento: this.adminNuevoDept,
+        departamento: deptoFinal,
         avatar: this.adminNuevoAvatar,
         puesto: 'Estudiante / Colaborador',
         empresaNombre: this.empresa.nombre,
         sucursal: this.empresa.sucursal,
         horario: this.empresa.horario,
         telefono: this.adminNuevoTel.trim(),
-        matricula: this.adminNuevoMatricula.trim()
+        matricula: this.adminNuevoMatricula.trim(),
+        verificadoCorreo: false,
+        tokenVerificacion: token,
+        codigoVerificacion: codigo6
       };
 
       const docRef = await this.registroService.registrarUsuario(nuevoEstudiante);
       nuevoEstudiante.id = docRef.id;
       this.usuariosSistema = [...this.usuariosSistema, nuevoEstudiante];
 
-      this.notificar(`✅ Alumno ${nuevoEstudiante.nombre} registrado correctamente`, 'exito');
       this.mostrarModalNuevoEstudiante = false;
+      this.notificar(`📧 Alumno creado. Falta confirmar "¿Eres tú?" en Gmail (${correoNorm})`, 'info');
+      await this.iniciarFlujoVerificacionGmail(nuevoEstudiante);
     } catch (error) {
       console.error(error);
       this.notificar('Error al guardar alumno en Firebase', 'alerta');
@@ -486,10 +723,95 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- REGISTRO Y LOGIN CON SESIÓN INDEPENDIENTE POR PESTAÑA (sessionStorage) ---
+  abrirModalEditarEstudiante(alumno: Usuario): void {
+    this.editEstudianteId = alumno.id || '';
+    this.editEstudianteNombre = alumno.nombre || '';
+    this.editEstudianteMatricula = alumno.matricula || '';
+    this.editEstudianteCorreo = alumno.correo || '';
+    this.editEstudianteTelefono = alumno.telefono || '';
+    this.editEstudiantePassword = alumno.password || '';
+
+    const deptoActual = alumno.departamento || 'General';
+    if (this.listaDepartamentosCompleta.includes(deptoActual)) {
+      this.editEstudianteDept = deptoActual;
+      this.editEstudianteDeptPersonalizado = '';
+    } else {
+      this.editEstudianteDept = '__OTRO__';
+      this.editEstudianteDeptPersonalizado = deptoActual;
+    }
+
+    this.mostrarModalEditarEstudiante = true;
+    this.cdr.detectChanges();
+  }
+
+  cerrarModalEditarEstudiante(): void {
+    this.mostrarModalEditarEstudiante = false;
+    this.cdr.detectChanges();
+  }
+
+  async guardarEdicionEstudiante(): Promise<void> {
+    if (!this.editEstudianteId) return;
+    if (!this.editEstudianteNombre.trim() || !this.editEstudianteCorreo.trim()) {
+      this.notificar('El nombre y el correo electrónico son obligatorios', 'alerta');
+      return;
+    }
+
+    const deptoFinal = this.editEstudianteDept === '__OTRO__'
+      ? this.editEstudianteDeptPersonalizado.trim()
+      : this.editEstudianteDept;
+
+    if (!deptoFinal) {
+      this.notificar('Escribe el nombre del departamento o área', 'alerta');
+      return;
+    }
+
+    this.cargandoAccion = true;
+    this.cdr.detectChanges();
+
+    try {
+      await this.registrarDepartamentoSiEsNuevo(deptoFinal);
+
+      const cambios: Partial<Usuario> = {
+        nombre: this.editEstudianteNombre.trim(),
+        matricula: this.editEstudianteMatricula.trim(),
+        correo: this.editEstudianteCorreo.trim().toLowerCase(),
+        telefono: this.editEstudianteTelefono.trim(),
+        departamento: deptoFinal
+      };
+
+      if (this.editEstudiantePassword.trim()) {
+        cambios.password = this.editEstudiantePassword.trim();
+      }
+
+      await this.registroService.actualizarUsuario(this.editEstudianteId, cambios);
+      this.usuariosSistema = this.usuariosSistema.map(u =>
+        u.id === this.editEstudianteId ? { ...u, ...cambios } : u
+      );
+
+      this.mostrarModalEditarEstudiante = false;
+      this.notificar('✅ Datos del estudiante actualizados correctamente', 'exito');
+    } catch (e) {
+      console.error('Error editando estudiante:', e);
+      this.notificar('Error al actualizar datos del estudiante', 'alerta');
+    } finally {
+      this.cargandoAccion = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  // --- REGISTRO Y LOGIN ---
   async ejecutarRegistro(): Promise<void> {
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
       this.notificar('Completa tu nombre, correo y contraseña', 'alerta');
+      return;
+    }
+
+    const deptoFinal = this.formDepartamento === '__OTRO__'
+      ? this.formDepartamentoPersonalizado.trim()
+      : this.formDepartamento;
+
+    if (!deptoFinal) {
+      this.notificar('Escribe el nombre de tu departamento o área', 'alerta');
       return;
     }
 
@@ -508,19 +830,27 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
+      await this.registrarDepartamentoSiEsNuevo(deptoFinal);
+
+      const token = 'VRF-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      const codigo6 = Math.floor(100000 + Math.random() * 900000).toString();
+
       const nuevoUsuario: Usuario = {
         nombre: this.formNombre.trim(),
         correo: correoNorm,
         password: this.formPassword.trim(),
         rol: this.formRol,
-        departamento: this.formDepartamento,
+        departamento: deptoFinal,
         avatar: this.formAvatar,
         puesto: this.formRol === 'admin' ? 'Administrador General' : 'Estudiante / Colaborador',
         empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre,
         sucursal: this.formSucursal.trim() || this.empresa.sucursal,
         horario: horarioFormateado,
         telefono: this.formTelefono.trim(),
-        matricula: this.formMatricula.trim()
+        matricula: this.formMatricula.trim(),
+        verificadoCorreo: false,
+        tokenVerificacion: token,
+        codigoVerificacion: codigo6
       };
 
       if (this.formRol === 'admin') {
@@ -538,9 +868,8 @@ export class App implements OnInit, OnDestroy {
       nuevoUsuario.id = docRef.id;
       this.usuariosSistema = [...this.usuariosSistema, nuevoUsuario];
 
-      this.iniciarSesionUsuario(nuevoUsuario);
-      this.notificar('¡Cuenta creada correctamente!', 'exito');
       this.limpiarFormularioAuth();
+      await this.iniciarFlujoVerificacionGmail(nuevoUsuario);
     } catch (error) {
       console.error(error);
       this.notificar('Error al crear la cuenta', 'alerta');
@@ -568,6 +897,13 @@ export class App implements OnInit, OnDestroy {
       }
 
       if (usuario && usuario.password === passBuscada) {
+        // Si tiene verificación de correo pendiente, pedir confirmación de 2 pasos
+        if (usuario.verificadoCorreo === false) {
+          this.notificar('⚠️ Confirma primero tu correo Gmail ("¿Eres tú?") para iniciar sesión.', 'alerta');
+          await this.iniciarFlujoVerificacionGmail(usuario);
+          return;
+        }
+
         this.iniciarSesionUsuario(usuario);
         await this.recargarDatosDesdeNube(false);
         this.notificar(`Bienvenido, ${usuario.nombre}`, 'exito');
@@ -588,7 +924,6 @@ export class App implements OnInit, OnDestroy {
     this.usuarioActual = { ...usuario };
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
-    // sessionStorage mantiene cada pestaña aislada en el mismo navegador Chrome
     sessionStorage.setItem('ticktock_user_tab', JSON.stringify(this.usuarioActual));
     localStorage.removeItem('ticktock_user');
     this.recalcularCronometros();
@@ -606,7 +941,6 @@ export class App implements OnInit, OnDestroy {
   }
 
   cargarSesionGuardada(): void {
-    // Limpiamos cualquier sesión compartida vieja para evitar cruces entre pestañas
     localStorage.removeItem('ticktock_user');
     const raw = sessionStorage.getItem('ticktock_user_tab');
     if (raw) {
@@ -634,6 +968,8 @@ export class App implements OnInit, OnDestroy {
     this.formHoraFin = '';
     this.formMatricula = '';
     this.formTelefono = '';
+    this.formDepartamento = 'General';
+    this.formDepartamentoPersonalizado = '';
   }
 
   // --- CONFIGURACIÓN DE EMPRESA ---
@@ -693,7 +1029,6 @@ export class App implements OnInit, OnDestroy {
   get estaEnTurno(): boolean { return this.registroActivo?.estado === 'En Turno'; }
   get estaEnPausa(): boolean { return this.registroActivo?.estado === 'En Pausa'; }
 
-  // Devuelve true si el estudiante ya tomó y finalizó su única comida de la jornada
   get comidaYaUtilizada(): boolean {
     const reg = this.registroActivo;
     if (!reg) return false;
@@ -762,7 +1097,7 @@ export class App implements OnInit, OnDestroy {
     this.observacionActual = '';
     await this.mostrarQRConTemporizador(pin, ahoraMs);
     this.recalcularCronometros();
-    this.notificar('🟢 Entrada iniciada. Escanea el QR antes de 15 min.', 'exito');
+    this.notificar('🟢 Entrada iniciada. Escanea el QR con tu celular.', 'exito');
 
     try {
       const docRef = await this.registroService.agregarRegistro(nuevo);
@@ -778,7 +1113,7 @@ export class App implements OnInit, OnDestroy {
 
   async verMiQRDeNuevo(): Promise<void> {
     const reg = this.registroActivo;
-    if (!reg || !reg.codigoQR) return;
+    if (!reg || !reg.codigoQR || reg.verificadoCamaraMovil) return;
     await this.mostrarQRConTemporizador(reg.codigoQR, reg.timestampQR || reg.timestampEntrada || Date.now());
   }
 
@@ -820,6 +1155,11 @@ export class App implements OnInit, OnDestroy {
   }
 
   async abrirEscanerCamara(): Promise<void> {
+    if (!this.estaEnTurno && !this.estaEnPausa) {
+      this.notificar('Primero marca tu entrada para generar el código QR', 'alerta');
+      return;
+    }
+
     this.codigoEscaneadoManual = '';
     this.errorModalEscaner = '';
     this.validandoQR = false;
@@ -896,7 +1236,7 @@ export class App implements OnInit, OnDestroy {
             }
           }
         } catch {
-          // Continuar con jsQR
+          // Seguir con jsQR
         }
       }
 
@@ -982,21 +1322,13 @@ export class App implements OnInit, OnDestroy {
       const horaExacta = ahora.toLocaleTimeString('es-ES');
       const LIMITE_15_MIN_MS = 15 * 60 * 1000;
 
-      const [registrosFrescos, qrKioscoFresco] = await Promise.all([
-        this.registroService.obtenerRegistrosDirecto(),
-        this.registroService.obtenerQrKioscoDirecto()
-      ]);
-
+      const registrosFrescos = await this.registroService.obtenerRegistrosDirecto();
       if (registrosFrescos.length > 0) {
         this.registros = registrosFrescos.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
-      }
-      if (qrKioscoFresco) {
-        this.qrKioscoActivo = qrKioscoFresco;
       }
 
       const regAlumno = this.registroActivo;
       const pinRegistroAlumno = this.extraerSoloDigitosOPin(regAlumno?.codigoQR);
-      const pinKioscoAdmin = this.extraerSoloDigitosOPin(this.qrKioscoActivo?.codigo);
 
       if (regAlumno && pinRegistroAlumno && (pinIngresado === pinRegistroAlumno || pinIngresado.includes(pinRegistroAlumno))) {
         const tsCreacion = regAlumno.timestampQR || regAlumno.timestampEntrada || 0;
@@ -1017,65 +1349,10 @@ export class App implements OnInit, OnDestroy {
         }
 
         this.detenerCamara();
+        this.mostrarModalQR = false;
         this.recalcularCronometros();
-        this.notificar(`✅ ¡Código verificado a las ${horaExacta}!`, 'exito');
+        this.notificar(`✅ ¡Código QR escaneado a las ${horaExacta}!`, 'exito');
         return;
-      }
-
-      if (this.qrKioscoActivo && pinKioscoAdmin && (pinIngresado === pinKioscoAdmin || pinIngresado.includes(pinKioscoAdmin))) {
-        if (ahoraMs - this.qrKioscoActivo.timestamp > LIMITE_15_MIN_MS) {
-          this.errorModalEscaner = '❌ El QR caducó (más de 15 min).';
-          return;
-        }
-
-        if (regAlumno) {
-          regAlumno.verificadoCamaraMovil = true;
-          regAlumno.horaEscaneoQR = horaExacta;
-          regAlumno.codigoQR = this.qrKioscoActivo.codigo;
-          const idReal = await this.obtenerIdRealRegistro(regAlumno);
-          if (idReal) {
-            await this.registroService.actualizarRegistro(idReal, {
-              verificadoCamaraMovil: true,
-              horaEscaneoQR: horaExacta,
-              codigoQR: this.qrKioscoActivo.codigo
-            });
-          }
-          this.detenerCamara();
-          this.recalcularCronometros();
-          this.notificar(`✅ ¡Asistencia verificada con QR a las ${horaExacta}!`, 'exito');
-          return;
-        } else if (this.usuarioActual) {
-          const textoIni = this.observacionActual.trim();
-          const tieneAct = textoIni.length > 0;
-          const nuevo: Registro = {
-            empleadoId: String(this.usuarioActual.correo).toLowerCase(),
-            empleadoNombre: this.usuarioActual.nombre,
-            puesto: this.usuarioActual.puesto || 'Estudiante / Colaborador',
-            departamento: this.usuarioActual.departamento || 'General',
-            fecha: ahora.toLocaleDateString('es-ES'),
-            mesAno: ahora.toISOString().substring(0, 7),
-            horaEntrada: horaExacta,
-            estado: 'En Turno',
-            observacion: tieneAct ? `[${horaExacta}] ${textoIni}` : 'Pendiente de registrar actividad',
-            actividades: tieneAct ? [{ hora: horaExacta, texto: textoIni }] : [],
-            actividadRegistrada: tieneAct,
-            comidaTerminada: false,
-            timestampEntrada: ahoraMs,
-            timestampQR: this.qrKioscoActivo.timestamp,
-            codigoQR: this.qrKioscoActivo.codigo,
-            verificadoCamaraMovil: true,
-            horaEscaneoQR: horaExacta
-          };
-
-          const docRef = await this.registroService.agregarRegistro(nuevo);
-          nuevo.id = docRef.id;
-          this.registros = [nuevo, ...this.registros];
-          this.observacionActual = '';
-          this.detenerCamara();
-          this.recalcularCronometros();
-          this.notificar(`🟢 ¡Entrada registrada y verificada a las ${horaExacta}!`, 'exito');
-          return;
-        }
       }
 
       const registroCoincidente = this.registros.find(r => {
@@ -1100,12 +1377,13 @@ export class App implements OnInit, OnDestroy {
           });
         }
         this.detenerCamara();
+        this.mostrarModalQR = false;
         this.recalcularCronometros();
-        this.notificar(`✅ ¡Código QR validado a las ${horaExacta}!`, 'exito');
+        this.notificar(`✅ ¡Código QR escaneado a las ${horaExacta}!`, 'exito');
         return;
       }
 
-      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con ningún QR activo. Verifica los 6 dígitos.`;
+      this.errorModalEscaner = `❌ El código "${rawInput}" no coincide con tu QR activo. Verifica los 6 dígitos.`;
       this.notificar('Código incorrecto. Revisa los dígitos.', 'alerta');
     } catch (error) {
       console.error('Error al validar código:', error);
@@ -1125,7 +1403,6 @@ export class App implements OnInit, OnDestroy {
     }
     if (this.cargandoAccion) return;
 
-    // Bloquear si ya tomó y finalizó su única comida de la jornada
     if (reg.estado === 'En Turno' && this.comidaYaUtilizada) {
       this.notificar('⚠️ Ya utilizaste tu única comida permitida en esta jornada.', 'alerta');
       return;
@@ -1202,7 +1479,6 @@ export class App implements OnInit, OnDestroy {
 
     const horaRegistro = new Date().toLocaleTimeString('es-ES');
 
-    // Conservar todas las actividades anteriores y añadir la nueva al final
     const listaPrevias: ActividadItem[] = (reg.actividades && reg.actividades.length > 0)
       ? [...reg.actividades]
       : (this.esActividadRegistrada(reg) ? [{ hora: reg.horaEntrada, texto: reg.observacion }] : []);

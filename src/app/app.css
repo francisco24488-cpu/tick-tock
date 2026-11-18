@@ -15,6 +15,85 @@ textarea::placeholder {
   opacity: 0.85;
 }
 
+/* Banners de confirmación QR y verificación Gmail */
+.qr-scanned-banner {
+  background: #f0fdf4;
+  border: 1.5px solid #22c55e;
+  color: #15803d;
+  padding: 0.85rem 1.15rem;
+  border-radius: 14px;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.verify-success-banner {
+  background: #f0fdf4;
+  border: 1.5px solid #22c55e;
+  color: #15803d;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.gmail-verify-box {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 1rem;
+}
+
+.gmail-verify-hint {
+  font-size: 0.84rem;
+  color: #334155;
+  line-height: 1.45;
+  margin-bottom: 0.85rem;
+}
+
+.btn-gmail-open {
+  background: #ea4335;
+  color: #ffffff;
+  border: none;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.btn-verify-pending {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #f59e0b;
+  padding: 0.28rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.actions-cell-duo {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  white-space: nowrap;
+}
+
+.btn-edit-row {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  border: 1px solid var(--primary-border);
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 /* Viñetas desplegables de horario ("De:" y "A:") */
 .schedule-duo-grid {
   display: grid;

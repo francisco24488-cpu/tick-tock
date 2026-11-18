@@ -1,9 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 import {
   Firestore,
   collection,
-  collectionData,
-  docData,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -12,7 +10,8 @@ import {
   query,
   where,
   getDocs,
-  getDoc
+  getDoc,
+  onSnapshot
 } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
 
@@ -30,6 +29,10 @@ export interface Empresa {
   habilitarReporteHoras: boolean;
   habilitarReporteInformes: boolean;
   habilitarReporteCompleto: boolean;
+  departamentosPersonalizados?: string[];
+  emailjsServiceId?: string;
+  emailjsTemplateId?: string;
+  emailjsPublicKey?: string;
 }
 
 export interface QrKioscoActivo {
@@ -52,6 +55,9 @@ export interface Usuario {
   horario?: string;
   telefono?: string;
   matricula?: string;
+  verificadoCorreo?: boolean;
+  tokenVerificacion?: string;
+  codigoVerificacion?: string;
 }
 
 export interface ActividadItem {
@@ -91,11 +97,28 @@ export interface Registro {
   providedIn: 'root'
 })
 export class RegistroService {
-  constructor(private firestore: Firestore) {}
+  constructor(
+    private firestore: Firestore,
+    private ngZone: NgZone
+  ) {}
 
+  // Escucha en tiempo real dentro de NgZone para actualización instantánea en pantalla
   getEmpresaConfig(): Observable<Empresa | undefined> {
-    const configDoc = doc(this.firestore, 'configuracion/empresa');
-    return docData(configDoc) as Observable<Empresa | undefined>;
+    return new Observable<Empresa | undefined>((subscriber) => {
+      const configDoc = doc(this.firestore, 'configuracion/empresa');
+      const unsub = onSnapshot(
+        configDoc,
+        (snap) => {
+          this.ngZone.run(() => {
+            subscriber.next(snap.exists() ? (snap.data() as Empresa) : undefined);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => subscriber.error(error));
+        }
+      );
+      return () => unsub();
+    });
   }
 
   async obtenerEmpresaConfigDirecto(): Promise<Empresa | null> {
@@ -115,8 +138,21 @@ export class RegistroService {
   }
 
   getQrKiosco(): Observable<QrKioscoActivo | undefined> {
-    const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
-    return docData(qrDoc) as Observable<QrKioscoActivo | undefined>;
+    return new Observable<QrKioscoActivo | undefined>((subscriber) => {
+      const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
+      const unsub = onSnapshot(
+        qrDoc,
+        (snap) => {
+          this.ngZone.run(() => {
+            subscriber.next(snap.exists() ? (snap.data() as QrKioscoActivo) : undefined);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => subscriber.error(error));
+        }
+      );
+      return () => unsub();
+    });
   }
 
   async obtenerQrKioscoDirecto(): Promise<QrKioscoActivo | null> {
@@ -136,15 +172,29 @@ export class RegistroService {
   }
 
   getRegistros(): Observable<Registro[]> {
-    const registrosRef = collection(this.firestore, 'registros');
-    return collectionData(registrosRef, { idField: 'id' }) as Observable<Registro[]>;
+    return new Observable<Registro[]>((subscriber) => {
+      const registrosRef = collection(this.firestore, 'registros');
+      const unsub = onSnapshot(
+        registrosRef,
+        (snap) => {
+          this.ngZone.run(() => {
+            const lista = snap.docs.map((d) => ({ ...(d.data() as Registro), id: d.id }));
+            subscriber.next(lista);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => subscriber.error(error));
+        }
+      );
+      return () => unsub();
+    });
   }
 
   async obtenerRegistrosDirecto(): Promise<Registro[]> {
     try {
       const registrosRef = collection(this.firestore, 'registros');
       const snap = await getDocs(registrosRef);
-      return snap.docs.map(d => ({ ...(d.data() as Registro), id: d.id }));
+      return snap.docs.map((d) => ({ ...(d.data() as Registro), id: d.id }));
     } catch (e) {
       console.error('Error leyendo registros directo:', e);
       return [];
@@ -169,15 +219,29 @@ export class RegistroService {
   }
 
   getUsuarios(): Observable<Usuario[]> {
-    const usuariosRef = collection(this.firestore, 'usuarios');
-    return collectionData(usuariosRef, { idField: 'id' }) as Observable<Usuario[]>;
+    return new Observable<Usuario[]>((subscriber) => {
+      const usuariosRef = collection(this.firestore, 'usuarios');
+      const unsub = onSnapshot(
+        usuariosRef,
+        (snap) => {
+          this.ngZone.run(() => {
+            const lista = snap.docs.map((d) => ({ ...(d.data() as Usuario), id: d.id }));
+            subscriber.next(lista);
+          });
+        },
+        (error) => {
+          this.ngZone.run(() => subscriber.error(error));
+        }
+      );
+      return () => unsub();
+    });
   }
 
   async obtenerUsuariosDirecto(): Promise<Usuario[]> {
     try {
       const usuariosRef = collection(this.firestore, 'usuarios');
       const snap = await getDocs(usuariosRef);
-      return snap.docs.map(d => ({ ...(d.data() as Usuario), id: d.id }));
+      return snap.docs.map((d) => ({ ...(d.data() as Usuario), id: d.id }));
     } catch (e) {
       console.error('Error leyendo usuarios directo:', e);
       return [];
@@ -189,6 +253,32 @@ export class RegistroService {
     const copia = { ...usuario };
     delete copia.id;
     return addDoc(usuariosRef, copia);
+  }
+
+  actualizarUsuario(id: string, data: Partial<Usuario>): Promise<void> {
+    const usuarioDoc = doc(this.firestore, `usuarios/${id}`);
+    return updateDoc(usuarioDoc, data);
+  }
+
+  async verificarUsuarioPorToken(token: string): Promise<Usuario | null> {
+    try {
+      const usuariosRef = collection(this.firestore, 'usuarios');
+      const q = query(usuariosRef, where('tokenVerificacion', '==', token.trim()));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const docSnap = snap.docs[0];
+        const usuario = { ...(docSnap.data() as Usuario), id: docSnap.id };
+        await updateDoc(doc(this.firestore, `usuarios/${docSnap.id}`), {
+          verificadoCorreo: true
+        });
+        usuario.verificadoCorreo = true;
+        return usuario;
+      }
+      return null;
+    } catch (e) {
+      console.error('Error verificando token de correo:', e);
+      return null;
+    }
   }
 
   async buscarUsuarioPorCorreo(correo: string): Promise<Usuario | null> {
