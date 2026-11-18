@@ -1,7 +1,8 @@
 import { Component, OnInit, OnDestroy, ChangeDetectorRef, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RegistroService, Empresa, Usuario, Registro, QrKioscoActivo, ActividadItem } from './services/registro';
+import { Subscription } from 'rxjs';
+import { RegistroService, Empresa, Usuario, Registro, ActividadItem } from './services/registro';
 
 @Component({
   selector: 'app-root',
@@ -17,6 +18,7 @@ export class App implements OnInit, OnDestroy {
 
   usuarioActual: Usuario | null = null;
   sesionIniciada: boolean = false;
+  empresaActualId: string = '';
 
   empresa: Empresa = {
     nombre: 'TickTock Asistencia',
@@ -85,21 +87,25 @@ export class App implements OnInit, OnDestroy {
     'Logística'
   ];
 
-  // Formularios Auth
+  // Formularios Auth (Registro exclusivo para Compañías)
   formCorreo: string = '';
   formPassword: string = '';
   formNombre: string = '';
-  formRol: 'estudiante' | 'admin' = 'estudiante';
-  formDepartamento: string = 'General';
+  formDepartamento: string = 'Administración';
   formDepartamentoPersonalizado: string = '';
-  formAvatar: string = '🧑‍💻';
+  formAvatar: string = '🏢';
   formEmpresaNombre: string = '';
   formSucursal: string = '';
   formUbicacion: string = '';
   formHoraInicio: string = '';
   formHoraFin: string = '';
   formTelefono: string = '';
-  formMatricula: string = '';
+
+  // Control de visibilidad de contraseñas (ojito)
+  verPassLogin: boolean = false;
+  verPassRegistro: boolean = false;
+  verPassNuevoAlumno: boolean = false;
+  verPassEditarAlumno: boolean = false;
 
   // Modal Nuevo Estudiante (Admin)
   mostrarModalNuevoEstudiante: boolean = false;
@@ -123,12 +129,14 @@ export class App implements OnInit, OnDestroy {
   editEstudianteDeptPersonalizado: string = '';
   editEstudiantePassword: string = '';
 
-  // Verificación de 2 Pasos por Gmail ("¿Eres tú?")
+  // Verificación de 2 Pasos por Gmail con código
   mostrarModalVerificacionGmail: boolean = false;
   usuarioPendienteVerificacion: Usuario | null = null;
   codigoVerificacionIngresado: string = '';
-  enlaceVerificacionGenerado: string = '';
   enviandoCorreoGmail: boolean = false;
+  correoEnviadoExito: boolean = false;
+  errorEnvioGmail: string = '';
+  mostrarConfigEmailJSInline: boolean = false;
   mensajeExitoVerificacionLink: string = '';
 
   // QR & Cámara Real
@@ -137,8 +145,8 @@ export class App implements OnInit, OnDestroy {
   codigoGeneradoQR: string = '';
   qrImagenUrl: string = '';
   timestampQRGenerado: number = 0;
+  private procesandoExpiracionQR: boolean = false;
 
-  qrKioscoActivo: QrKioscoActivo | null = null;
   codigoEscaneadoManual: string = '';
   escaneandoCamara: boolean = false;
   validandoQR: boolean = false;
@@ -174,6 +182,7 @@ export class App implements OnInit, OnDestroy {
   relojAmPm: string = 'AM';
   relojFecha: string = '';
   private masterTimerId: any;
+  private subsEmpresa: Subscription[] = [];
 
   mostrarToast: boolean = false;
   mensajeToast: string = '';
@@ -192,38 +201,50 @@ export class App implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.cargarLibreriasQR();
-    this.cargarConfiguracionLocal();
+    this.aplicarVariablesGlobalesCSS('#f97316');
     this.cargarSesionGuardada();
     this.iniciarRelojYCronometros();
     this.procesarEnlaceVerificacionGmail();
-    this.recargarDatosDesdeNube(false);
+  }
 
-    // Suscripción en tiempo real a colores y configuración de empresa
-    this.registroService.getEmpresaConfig().subscribe({
+  ngOnDestroy(): void {
+    if (this.masterTimerId) clearInterval(this.masterTimerId);
+    this.limpiarSuscripcionesEmpresa();
+    this.detenerCamara();
+  }
+
+  private limpiarSuscripcionesEmpresa(): void {
+    this.subsEmpresa.forEach(s => s.unsubscribe());
+    this.subsEmpresa = [];
+  }
+
+  // --- CONECTAR EXCLUSIVAMENTE A LA BASE DE DATOS DE LA COMPAÑÍA DEL USUARIO ---
+  private suscribirDatosDeEmpresa(empresaId: string): void {
+    this.limpiarSuscripcionesEmpresa();
+    this.empresaActualId = empresaId || 'default_empresa';
+    this.usuariosSistema = [];
+    this.registros = [];
+
+    const subCfg = this.registroService.getEmpresaConfigById(this.empresaActualId).subscribe({
       next: (cfg) => {
         if (cfg) {
           this.aplicarConfiguracionRecibida(cfg);
+        } else if (this.usuarioActual?.empresaNombre) {
+          this.empresa.nombre = this.usuarioActual.empresaNombre;
+          this.empresa.sucursal = this.usuarioActual.sucursal || '';
+          this.empresa.horario = this.usuarioActual.horario || '';
+          this.cdr.detectChanges();
         }
       },
       error: (err) => console.error('Error config empresa:', err)
     });
 
-    this.registroService.getQrKiosco().subscribe({
-      next: (qr) => {
-        this.qrKioscoActivo = qr || null;
-        this.cdr.detectChanges();
-      },
-      error: (err) => console.error('Error QR kiosco:', err)
-    });
-
-    // Suscripción en tiempo real a registros (detecta al instante cuando escaneas el QR con el celular)
-    this.registroService.getRegistros().subscribe({
+    const subReg = this.registroService.getRegistrosByEmpresa(this.empresaActualId).subscribe({
       next: (data: Registro[]) => {
         const previoVerificado = this.registroActivo?.verificadoCamaraMovil;
         this.registros = (data || []).sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
         const actualVerificado = this.registroActivo?.verificadoCamaraMovil;
 
-        // Si el QR acaba de ser escaneado desde el celular, cerrar el modal QR en la PC al instante
         if (!previoVerificado && actualVerificado && this.mostrarModalQR) {
           this.mostrarModalQR = false;
           this.notificar(`✅ ¡Código QR escaneado a las ${this.registroActivo?.horaEscaneoQR}!`, 'exito');
@@ -235,8 +256,7 @@ export class App implements OnInit, OnDestroy {
       error: (err: any) => console.error('Error registros:', err)
     });
 
-    // Suscripción en tiempo real a usuarios (detecta al instante cuando confirman "Sí, soy yo" en Gmail)
-    this.registroService.getUsuarios().subscribe({
+    const subUsr = this.registroService.getUsuariosByEmpresa(this.empresaActualId).subscribe({
       next: (data: Usuario[]) => {
         this.usuariosSistema = data || [];
 
@@ -248,7 +268,7 @@ export class App implements OnInit, OnDestroy {
             this.mostrarModalVerificacionGmail = false;
             const eraAutoregistro = !this.sesionIniciada;
             this.usuarioPendienteVerificacion = null;
-            this.notificar('✅ ¡Correo verificado en Gmail! Registro completado.', 'exito');
+            this.notificar('✅ ¡Correo verificado en Gmail! Cuenta activada.', 'exito');
             if (eraAutoregistro) {
               this.iniciarSesionUsuario(actualizado);
             }
@@ -259,26 +279,22 @@ export class App implements OnInit, OnDestroy {
       },
       error: (err: any) => console.error('Error usuarios:', err)
     });
+
+    this.subsEmpresa.push(subCfg, subReg, subUsr);
   }
 
-  ngOnDestroy(): void {
-    if (this.masterTimerId) clearInterval(this.masterTimerId);
-    this.detenerCamara();
-  }
-
-  // --- PROCESAR ENLACE DE VERIFICACIÓN EN 2 PASOS ("¿Eres tú?") DESDE GMAIL ---
+  // --- PROCESAR ENLACE DE VERIFICACIÓN EN 2 PASOS DESDE GMAIL ---
   private async procesarEnlaceVerificacionGmail(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('verificar');
     if (!token) return;
 
-    // Limpiar el parámetro de la URL
     window.history.replaceState({}, document.title, window.location.pathname);
 
     const verificado = await this.registroService.verificarUsuarioPorToken(token);
     if (verificado) {
-      this.mensajeExitoVerificacionLink = `✅ ¡Identidad confirmada! El correo ${verificado.correo} ha sido verificado ("Sí, soy yo"). Ya puedes usar TickTock.`;
-      this.notificar(`✅ Correo ${verificado.correo} verificado correctamente`, 'exito');
+      this.mensajeExitoVerificacionLink = `✅ ¡Identidad confirmada! El correo ${verificado.correo} ha sido verificado correctamente.`;
+      this.notificar(`✅ Correo ${verificado.correo} verificado`, 'exito');
       if (!this.sesionIniciada) {
         this.iniciarSesionUsuario(verificado);
       }
@@ -288,7 +304,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- GESTIÓN GLOBAL DE COLORES EN TIEMPO REAL ---
+  // --- GESTIÓN DE COLORES POR COMPAÑÍA EN TIEMPO REAL ---
   get temaEstilos(): { [key: string]: string } {
     const primary = this.empresa.colorTema || '#f97316';
     const dark = this.oscurecerHex(primary, 18);
@@ -310,30 +326,14 @@ export class App implements OnInit, OnDestroy {
     root.style.setProperty('--primary-border', `${color}48`);
   }
 
-  private cargarConfiguracionLocal(): void {
-    const raw = localStorage.getItem('ticktock_empresa_cfg');
-    if (raw) {
-      try {
-        const saved = JSON.parse(raw);
-        if (saved) {
-          this.empresa = { ...this.empresa, ...saved };
-        }
-      } catch {
-        localStorage.removeItem('ticktock_empresa_cfg');
-      }
-    }
-    this.aplicarVariablesGlobalesCSS(this.empresa.colorTema || '#f97316');
-  }
-
   private aplicarConfiguracionRecibida(cfg: Partial<Empresa>): void {
     this.empresa = {
       ...this.empresa,
       ...cfg,
-      colorTema: cfg.colorTema || this.empresa.colorTema || '#f97316',
-      departamentosPersonalizados: cfg.departamentosPersonalizados || this.empresa.departamentosPersonalizados || []
+      colorTema: cfg.colorTema || '#f97316',
+      departamentosPersonalizados: cfg.departamentosPersonalizados || []
     };
     this.aplicarVariablesGlobalesCSS(this.empresa.colorTema!);
-    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
     this.cdr.detectChanges();
   }
 
@@ -351,19 +351,18 @@ export class App implements OnInit, OnDestroy {
   seleccionarColorEnModal(hex: string): void {
     this.empresa.colorTema = hex;
     this.aplicarVariablesGlobalesCSS(hex);
-    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
     this.cdr.detectChanges();
   }
 
   async cambiarColorTemaRapido(hex: string): Promise<void> {
+    if (!this.empresaActualId) return;
     this.empresa.colorTema = hex;
     this.aplicarVariablesGlobalesCSS(hex);
-    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
     this.cdr.detectChanges();
 
     try {
-      await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('🎨 Color actualizado al instante para todos', 'exito');
+      await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
+      this.notificar('🎨 Color actualizado al instante para tu compañía', 'exito');
     } catch (e) {
       console.error('Error guardando color en Firebase:', e);
       this.notificar('⚠️ Color aplicado localmente, revisa conexión', 'alerta');
@@ -372,14 +371,13 @@ export class App implements OnInit, OnDestroy {
 
   private async registrarDepartamentoSiEsNuevo(nombreDepto: string): Promise<void> {
     const limpio = nombreDepto.trim();
-    if (!limpio) return;
+    if (!limpio || !this.empresaActualId) return;
     const existe = this.listaDepartamentosCompleta.some(d => d.toLowerCase() === limpio.toLowerCase());
     if (!existe) {
       const actuales = this.empresa.departamentosPersonalizados || [];
       this.empresa.departamentosPersonalizados = [...actuales, limpio];
-      localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
       try {
-        await this.registroService.guardarEmpresaConfig(this.empresa);
+        await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
       } catch (e) {
         console.error('Error guardando departamento personalizado:', e);
       }
@@ -387,22 +385,19 @@ export class App implements OnInit, OnDestroy {
   }
 
   async recargarDatosDesdeNube(mostrarAviso: boolean = true): Promise<void> {
+    if (!this.empresaActualId) return;
     try {
-      const [cfgNube, usuarios, registros, qrKiosco] = await Promise.all([
-        this.registroService.obtenerEmpresaConfigDirecto(),
-        this.registroService.obtenerUsuariosDirecto(),
-        this.registroService.obtenerRegistrosDirecto(),
-        this.registroService.obtenerQrKioscoDirecto()
+      const [cfgNube, usuarios, registros] = await Promise.all([
+        this.registroService.obtenerEmpresaConfigDirecto(this.empresaActualId),
+        this.registroService.obtenerUsuariosDirecto(this.empresaActualId),
+        this.registroService.obtenerRegistrosDirecto(this.empresaActualId)
       ]);
 
       if (cfgNube) {
         this.aplicarConfiguracionRecibida(cfgNube);
       }
-      if (usuarios.length > 0) this.usuariosSistema = usuarios;
-      if (registros.length > 0) {
-        this.registros = registros.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
-      }
-      if (qrKiosco) this.qrKioscoActivo = qrKiosco;
+      this.usuariosSistema = usuarios;
+      this.registros = registros.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
 
       this.recalcularCronometros();
       this.cdr.detectChanges();
@@ -455,17 +450,24 @@ export class App implements OnInit, OnDestroy {
     this.masterTimerId = setInterval(tick, 1000);
   }
 
+  // --- CRONÓMETROS EN VIVO Y EXPIRACIÓN ESTRICTA DE 15 MINUTOS ---
   private recalcularCronometros(): void {
     const ahoraMs = Date.now();
     const reg = this.registroActivo;
 
     const refQrTs = this.mostrarModalQR && this.timestampQRGenerado
       ? this.timestampQRGenerado
-      : (reg?.timestampQR || reg?.timestampEntrada || this.qrKioscoActivo?.timestamp || 0);
+      : (reg?.timestampQR || reg?.timestampEntrada || 0);
 
-    if (refQrTs > 0 && (!reg || !reg.verificadoCamaraMovil)) {
+    if (reg && !reg.verificadoCamaraMovil && refQrTs > 0) {
       const restQR = 900 - Math.floor((ahoraMs - refQrTs) / 1000);
       this.tiempoRestanteQR = restQR > 0 ? restQR : 0;
+
+      // Si pasaron los 15 minutos y NO escaneó el QR: anular entrada, sacar del turno y alertar al encargado
+      if (restQR <= 0 && !this.procesandoExpiracionQR) {
+        this.procesandoExpiracionQR = true;
+        this.ejecutarExpiracionTurnoPorQR(reg);
+      }
     } else {
       this.tiempoRestanteQR = 0;
     }
@@ -493,6 +495,45 @@ export class App implements OnInit, OnDestroy {
       this.tiempoRestantePausa = 0;
       this.avisoComida2MinDado = false;
       this.avisoComida1MinDado = false;
+    }
+  }
+
+  private async ejecutarExpiracionTurnoPorQR(reg: Registro): Promise<void> {
+    try {
+      const horaLimiteStr = new Date().toLocaleTimeString('es-ES');
+      const motivoExpiracion = '⛔ Entrada cancelada: No escaneó el QR dentro de los 15 minutos reglamentarios';
+
+      reg.estado = 'Expirado';
+      reg.qrExpiradoSinEscanear = true;
+      reg.alertaVistaPorAdmin = false;
+      reg.horaSalida = horaLimiteStr;
+      reg.totalHoras = 'Anulado (QR Expirado)';
+      reg.observacion = motivoExpiracion;
+
+      this.mostrarModalQR = false;
+      this.detenerCamara();
+
+      const idReal = await this.obtenerIdRealRegistro(reg);
+      if (idReal) {
+        await this.registroService.actualizarRegistro(idReal, {
+          estado: 'Expirado',
+          qrExpiradoSinEscanear: true,
+          alertaVistaPorAdmin: false,
+          horaSalida: horaLimiteStr,
+          totalHoras: 'Anulado (QR Expirado)',
+          observacion: motivoExpiracion
+        });
+      }
+
+      this.notificar(
+        '⛔ ¡Tiempo agotado (15 min)! No escaneaste el QR a tiempo. Tu entrada fue cancelada y se notificó al encargado.',
+        'alerta'
+      );
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('Error al expirar turno por QR:', e);
+    } finally {
+      this.procesandoExpiracionQR = false;
     }
   }
 
@@ -532,62 +573,88 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- ENVÍO DE CORREO GMAIL DE VERIFICACIÓN EN 2 PASOS ("¿Eres tú?") ---
-  private async iniciarFlujoVerificacionGmail(usuario: Usuario): Promise<void> {
-    const origen = window.location.origin;
-    const enlace = `${origen}/?verificar=${encodeURIComponent(usuario.tokenVerificacion || '')}`;
-
+  // --- ENVÍO REAL DE CÓDIGO DE VERIFICACIÓN DE 2 PASOS POR GMAIL (SIN VENTANA DE REDACCIÓN) ---
+  private async enviarCorreoCodigoGmailReal(usuario: Usuario): Promise<void> {
     this.usuarioPendienteVerificacion = usuario;
-    this.enlaceVerificacionGenerado = enlace;
     this.codigoVerificacionIngresado = '';
+    this.correoEnviadoExito = false;
+    this.errorEnvioGmail = '';
+    this.mostrarConfigEmailJSInline = false;
     this.mostrarModalVerificacionGmail = true;
     this.cdr.detectChanges();
 
-    // Si el Admin configuró EmailJS, enviamos el correo automáticamente a Gmail
-    if (this.empresa.emailjsServiceId && this.empresa.emailjsTemplateId && this.empresa.emailjsPublicKey) {
-      this.enviandoCorreoGmail = true;
+    const serviceId = (this.empresa.emailjsServiceId || '').trim();
+    const templateId = (this.empresa.emailjsTemplateId || '').trim();
+    const publicKey = (this.empresa.emailjsPublicKey || '').trim();
+
+    if (!serviceId || !templateId || !publicKey) {
+      this.errorEnvioGmail = '⚠️ Falta conectar el servicio de envío automático de correo (EmailJS) en esta compañía.';
+      this.mostrarConfigEmailJSInline = true;
       this.cdr.detectChanges();
-      try {
-        await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_id: this.empresa.emailjsServiceId.trim(),
-            template_id: this.empresa.emailjsTemplateId.trim(),
-            user_id: this.empresa.emailjsPublicKey.trim(),
-            template_params: {
-              to_email: usuario.correo,
-              to_name: usuario.nombre,
-              app_name: this.empresa.nombre || 'TickTock',
-              verification_link: enlace,
-              verification_code: usuario.codigoVerificacion,
-              message: `¿Eres tú la persona que se está registrando en ${this.empresa.nombre || 'TickTock'}? Haz clic en "Sí, soy yo" en el enlace: ${enlace} o usa el código ${usuario.codigoVerificacion}`
-            }
-          })
-        });
-        this.notificar(`📧 Correo de confirmación enviado a ${usuario.correo}`, 'exito');
-      } catch (e) {
-        console.error('Error enviando correo automático:', e);
-      } finally {
-        this.enviandoCorreoGmail = false;
-        this.cdr.detectChanges();
+      return;
+    }
+
+    this.enviandoCorreoGmail = true;
+    this.cdr.detectChanges();
+
+    const enlace = `${window.location.origin}/?verificar=${encodeURIComponent(usuario.tokenVerificacion || '')}`;
+
+    try {
+      const resp = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service_id: serviceId,
+          template_id: templateId,
+          user_id: publicKey,
+          template_params: {
+            to_email: usuario.correo,
+            email: usuario.correo,
+            to_name: usuario.nombre,
+            app_name: usuario.empresaNombre || this.empresa.nombre || 'TickTock',
+            codigo: usuario.codigoVerificacion,
+            verification_code: usuario.codigoVerificacion,
+            verification_link: enlace,
+            message: `Hola ${usuario.nombre}, tu código de verificación en 2 pasos para ${usuario.empresaNombre || this.empresa.nombre} es: ${usuario.codigoVerificacion}. Si fuiste tú, ingresa este código o haz clic en "Sí, soy yo": ${enlace}`
+          }
+        })
+      });
+
+      if (resp.ok) {
+        this.correoEnviadoExito = true;
+        this.notificar(`📩 Código de verificación enviado al correo ${usuario.correo}`, 'exito');
+      } else {
+        const txt = await resp.text();
+        this.errorEnvioGmail = `❌ No se pudo enviar el correo (${txt || 'Revisa tus claves de EmailJS'}).`;
       }
+    } catch (e) {
+      console.error('Error enviando correo de verificación:', e);
+      this.errorEnvioGmail = '❌ Error de red al enviar el correo de verificación.';
+    } finally {
+      this.enviandoCorreoGmail = false;
+      this.cdr.detectChanges();
     }
   }
 
-  abrirGmailParaConfirmar(): void {
+  async guardarConfigEmailJSYReenviar(): Promise<void> {
+    if (!this.empresa.emailjsServiceId?.trim() || !this.empresa.emailjsTemplateId?.trim() || !this.empresa.emailjsPublicKey?.trim()) {
+      this.notificar('Completa Service ID, Template ID y Public Key', 'alerta');
+      return;
+    }
+
+    const empId = this.usuarioPendienteVerificacion?.empresaId || this.empresaActualId;
+    if (empId) {
+      await this.registroService.guardarEmpresaConfig(empId, this.empresa);
+    }
+
+    if (this.usuarioPendienteVerificacion) {
+      await this.enviarCorreoCodigoGmailReal(this.usuarioPendienteVerificacion);
+    }
+  }
+
+  async reenviarCodigoVerificacion(): Promise<void> {
     if (!this.usuarioPendienteVerificacion) return;
-    const u = this.usuarioPendienteVerificacion;
-    const asunto = encodeURIComponent(`¿Eres tú? Confirma tu registro en ${this.empresa.nombre || 'TickTock'}`);
-    const cuerpo = encodeURIComponent(
-      `Hola ${u.nombre},\n\n` +
-      `Se ha iniciado un registro con tu correo (${u.correo}) en la plataforma ${this.empresa.nombre || 'TickTock'}.\n\n` +
-      `¿Eres tú la persona que se está registrando?\n` +
-      `👉 Haz clic aquí para confirmar ("Sí, soy yo"):\n${this.enlaceVerificacionGenerado}\n\n` +
-      `O ingresa este código de verificación en la página: ${u.codigoVerificacion}\n\n` +
-      `Si no fuiste tú, ignora este mensaje.`
-    );
-    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(u.correo)}&su=${asunto}&body=${cuerpo}`, '_blank');
+    await this.enviarCorreoCodigoGmailReal(this.usuarioPendienteVerificacion);
   }
 
   async confirmarCodigoVerificacion2Pasos(): Promise<void> {
@@ -595,7 +662,7 @@ export class App implements OnInit, OnDestroy {
     const codigoLimpio = this.codigoVerificacionIngresado.trim();
 
     if (!codigoLimpio || codigoLimpio !== this.usuarioPendienteVerificacion.codigoVerificacion) {
-      this.notificar('❌ El código de verificación no coincide. Revisa el correo Gmail.', 'alerta');
+      this.notificar('❌ El código de 6 dígitos no coincide. Revisa tu bandeja de Gmail.', 'alerta');
       return;
     }
 
@@ -615,14 +682,14 @@ export class App implements OnInit, OnDestroy {
       const eraAutoregistro = !this.sesionIniciada;
       this.mostrarModalVerificacionGmail = false;
       this.usuarioPendienteVerificacion = null;
-      this.notificar('✅ ¡Sí, soy yo confirmado! Registro verificado con éxito.', 'exito');
+      this.notificar('✅ ¡Código verificado! Correo confirmado con éxito.', 'exito');
 
       if (eraAutoregistro) {
         this.iniciarSesionUsuario(u);
       }
     } catch (e) {
       console.error(e);
-      this.notificar('Error al confirmar verificación', 'alerta');
+      this.notificar('Error al confirmar código de verificación', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -636,10 +703,10 @@ export class App implements OnInit, OnDestroy {
   }
 
   reenviarVerificacionAlumno(alumno: Usuario): void {
-    this.iniciarFlujoVerificacionGmail(alumno);
+    this.enviarCorreoCodigoGmailReal(alumno);
   }
 
-  // --- GESTIÓN DE ALUMNOS (ADMIN: ALTA Y EDICIÓN COMPLETA) ---
+  // --- GESTIÓN DE ALUMNOS (ADMIN: ALTA Y EDICIÓN COMPLETA EN SU PROPIA COMPAÑÍA) ---
   abrirModalNuevoEstudiante(): void {
     this.adminNuevoNombre = '';
     this.adminNuevoCorreo = '';
@@ -649,6 +716,7 @@ export class App implements OnInit, OnDestroy {
     this.adminNuevoAvatar = '🧑‍💻';
     this.adminNuevoTel = '';
     this.adminNuevoMatricula = '';
+    this.verPassNuevoAlumno = false;
     this.mostrarModalNuevoEstudiante = true;
     this.cdr.detectChanges();
   }
@@ -659,6 +727,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   async registrarEstudiantePorAdmin(): Promise<void> {
+    if (!this.empresaActualId) return;
     if (!this.adminNuevoNombre.trim() || !this.adminNuevoCorreo.trim() || !this.adminNuevoPassword.trim()) {
       this.notificar('Ingresa nombre, correo y contraseña', 'alerta');
       return;
@@ -680,7 +749,7 @@ export class App implements OnInit, OnDestroy {
     try {
       const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
       if (existe) {
-        this.notificar('Este correo ya está registrado', 'alerta');
+        this.notificar('Este correo ya está registrado en la plataforma', 'alerta');
         return;
       }
 
@@ -690,6 +759,7 @@ export class App implements OnInit, OnDestroy {
       const codigo6 = Math.floor(100000 + Math.random() * 900000).toString();
 
       const nuevoEstudiante: Usuario = {
+        empresaId: this.empresaActualId,
         nombre: this.adminNuevoNombre.trim(),
         correo: correoNorm,
         password: this.adminNuevoPassword.trim(),
@@ -712,8 +782,8 @@ export class App implements OnInit, OnDestroy {
       this.usuariosSistema = [...this.usuariosSistema, nuevoEstudiante];
 
       this.mostrarModalNuevoEstudiante = false;
-      this.notificar(`📧 Alumno creado. Falta confirmar "¿Eres tú?" en Gmail (${correoNorm})`, 'info');
-      await this.iniciarFlujoVerificacionGmail(nuevoEstudiante);
+      this.notificar(`📩 Alumno creado. Enviando código de verificación a ${correoNorm}...`, 'info');
+      await this.enviarCorreoCodigoGmailReal(nuevoEstudiante);
     } catch (error) {
       console.error(error);
       this.notificar('Error al guardar alumno en Firebase', 'alerta');
@@ -730,6 +800,7 @@ export class App implements OnInit, OnDestroy {
     this.editEstudianteCorreo = alumno.correo || '';
     this.editEstudianteTelefono = alumno.telefono || '';
     this.editEstudiantePassword = alumno.password || '';
+    this.verPassEditarAlumno = false;
 
     const deptoActual = alumno.departamento || 'General';
     if (this.listaDepartamentosCompleta.includes(deptoActual)) {
@@ -799,10 +870,14 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- REGISTRO Y LOGIN ---
+  // --- REGISTRO EXCLUSIVO PARA COMPAÑÍAS (CREA SU PROPIA BASE DE DATOS AISLADA) ---
   async ejecutarRegistro(): Promise<void> {
+    if (!this.formEmpresaNombre.trim()) {
+      this.notificar('Ingresa el nombre de tu Compañía o Institución', 'alerta');
+      return;
+    }
     if (!this.formNombre.trim() || !this.formCorreo.trim() || !this.formPassword.trim()) {
-      this.notificar('Completa tu nombre, correo y contraseña', 'alerta');
+      this.notificar('Completa el nombre del encargado, correo Gmail y contraseña', 'alerta');
       return;
     }
 
@@ -811,7 +886,7 @@ export class App implements OnInit, OnDestroy {
       : this.formDepartamento;
 
     if (!deptoFinal) {
-      this.notificar('Escribe el nombre de tu departamento o área', 'alerta');
+      this.notificar('Escribe el nombre del departamento o área', 'alerta');
       return;
     }
 
@@ -821,58 +896,75 @@ export class App implements OnInit, OnDestroy {
 
     const horarioFormateado = (this.formHoraInicio && this.formHoraFin)
       ? `De ${this.formHoraInicio} a ${this.formHoraFin}`
-      : (this.formHoraInicio ? `Desde ${this.formHoraInicio}` : (this.empresa.horario || 'Por definir'));
+      : (this.formHoraInicio ? `Desde ${this.formHoraInicio}` : 'Por definir');
 
     try {
       const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
       if (existe) {
-        this.notificar('Este correo ya existe en la plataforma', 'alerta');
+        this.notificar('Este correo ya está registrado. Inicia sesión o usa otro correo.', 'alerta');
         return;
       }
 
-      await this.registrarDepartamentoSiEsNuevo(deptoFinal);
+      // Crear ID único e independiente para esta nueva compañía
+      const nuevaEmpresaId = 'emp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      const departamentosInit = this.departamentosBase.some(d => d.toLowerCase() === deptoFinal.toLowerCase())
+        ? []
+        : [deptoFinal];
+
+      const nuevaEmpresa: Empresa = {
+        id: nuevaEmpresaId,
+        nombre: this.formEmpresaNombre.trim(),
+        sucursal: this.formSucursal.trim(),
+        ubicacion: this.formUbicacion.trim(),
+        codigo: 'TT-' + Math.floor(1000 + Math.random() * 9000),
+        horario: horarioFormateado,
+        horaInicio: this.formHoraInicio,
+        horaFin: this.formHoraFin,
+        colorTema: '#f97316',
+        duracionComidaMinutos: 45,
+        habilitarFormEstudiantes: true,
+        habilitarReporteHoras: true,
+        habilitarReporteInformes: true,
+        habilitarReporteCompleto: true,
+        departamentosPersonalizados: departamentosInit,
+        emailjsServiceId: '',
+        emailjsTemplateId: '',
+        emailjsPublicKey: ''
+      };
+
+      await this.registroService.guardarEmpresaConfig(nuevaEmpresaId, nuevaEmpresa);
+      this.empresa = { ...nuevaEmpresa };
+      this.empresaActualId = nuevaEmpresaId;
 
       const token = 'VRF-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
       const codigo6 = Math.floor(100000 + Math.random() * 900000).toString();
 
-      const nuevoUsuario: Usuario = {
+      const nuevoAdmin: Usuario = {
+        empresaId: nuevaEmpresaId,
         nombre: this.formNombre.trim(),
         correo: correoNorm,
         password: this.formPassword.trim(),
-        rol: this.formRol,
+        rol: 'admin',
         departamento: deptoFinal,
-        avatar: this.formAvatar,
-        puesto: this.formRol === 'admin' ? 'Administrador General' : 'Estudiante / Colaborador',
-        empresaNombre: this.formEmpresaNombre.trim() || this.empresa.nombre,
-        sucursal: this.formSucursal.trim() || this.empresa.sucursal,
+        avatar: '👑',
+        puesto: 'Administrador / Encargado',
+        empresaNombre: nuevaEmpresa.nombre,
+        sucursal: nuevaEmpresa.sucursal,
         horario: horarioFormateado,
         telefono: this.formTelefono.trim(),
-        matricula: this.formMatricula.trim(),
         verificadoCorreo: false,
         tokenVerificacion: token,
         codigoVerificacion: codigo6
       };
 
-      if (this.formRol === 'admin') {
-        if (this.formEmpresaNombre.trim()) this.empresa.nombre = this.formEmpresaNombre.trim();
-        if (this.formSucursal.trim()) this.empresa.sucursal = this.formSucursal.trim();
-        if (this.formUbicacion.trim()) this.empresa.ubicacion = this.formUbicacion.trim();
-        if (this.formHoraInicio) this.empresa.horaInicio = this.formHoraInicio;
-        if (this.formHoraFin) this.empresa.horaFin = this.formHoraFin;
-        if (this.formHoraInicio || this.formHoraFin) this.empresa.horario = horarioFormateado;
-        localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
-        await this.registroService.guardarEmpresaConfig(this.empresa);
-      }
-
-      const docRef = await this.registroService.registrarUsuario(nuevoUsuario);
-      nuevoUsuario.id = docRef.id;
-      this.usuariosSistema = [...this.usuariosSistema, nuevoUsuario];
+      const docRef = await this.registroService.registrarUsuario(nuevoAdmin);
+      nuevoAdmin.id = docRef.id;
 
       this.limpiarFormularioAuth();
-      await this.iniciarFlujoVerificacionGmail(nuevoUsuario);
+      await this.enviarCorreoCodigoGmailReal(nuevoAdmin);
     } catch (error) {
       console.error(error);
-      this.notificar('Error al crear la cuenta', 'alerta');
+      this.notificar('Error al registrar la compañía', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -891,16 +983,18 @@ export class App implements OnInit, OnDestroy {
     const passBuscada = this.formPassword.trim();
 
     try {
-      let usuario = await this.registroService.buscarUsuarioPorCorreo(correoBuscado);
-      if (!usuario) {
-        usuario = this.usuariosSistema.find(u => u.correo.toLowerCase() === correoBuscado) || null;
-      }
+      const usuario = await this.registroService.buscarUsuarioPorCorreo(correoBuscado);
 
       if (usuario && usuario.password === passBuscada) {
-        // Si tiene verificación de correo pendiente, pedir confirmación de 2 pasos
+        const empId = usuario.empresaId || 'default_empresa';
+        const cfgEmpresa = await this.registroService.obtenerEmpresaConfigDirecto(empId);
+        if (cfgEmpresa) {
+          this.aplicarConfiguracionRecibida(cfgEmpresa);
+        }
+
         if (usuario.verificadoCorreo === false) {
-          this.notificar('⚠️ Confirma primero tu correo Gmail ("¿Eres tú?") para iniciar sesión.', 'alerta');
-          await this.iniciarFlujoVerificacionGmail(usuario);
+          this.notificar('⚠️ Confirma primero tu correo Gmail con el código de 6 dígitos.', 'alerta');
+          await this.enviarCorreoCodigoGmailReal(usuario);
           return;
         }
 
@@ -921,18 +1015,28 @@ export class App implements OnInit, OnDestroy {
   }
 
   iniciarSesionUsuario(usuario: Usuario): void {
-    this.usuarioActual = { ...usuario };
+    const empId = usuario.empresaId || 'default_empresa';
+    this.usuarioActual = { ...usuario, empresaId: empId };
+    this.empresaActualId = empId;
     this.sesionIniciada = true;
     this.pantallaActual = 'dashboard';
+
     sessionStorage.setItem('ticktock_user_tab', JSON.stringify(this.usuarioActual));
     localStorage.removeItem('ticktock_user');
+
+    this.suscribirDatosDeEmpresa(empId);
     this.recalcularCronometros();
     this.cdr.detectChanges();
   }
 
   cerrarSesion(): void {
+    this.limpiarSuscripcionesEmpresa();
     this.usuarioActual = null;
+    this.empresaActualId = '';
     this.sesionIniciada = false;
+    this.usuariosSistema = [];
+    this.registros = [];
+    this.aplicarVariablesGlobalesCSS('#f97316');
     this.pantallaActual = 'bienvenida';
     sessionStorage.removeItem('ticktock_user_tab');
     localStorage.removeItem('ticktock_user');
@@ -947,9 +1051,12 @@ export class App implements OnInit, OnDestroy {
       try {
         const user = JSON.parse(raw);
         if (user && user.nombre && user.rol) {
-          this.usuarioActual = user;
+          const empId = user.empresaId || 'default_empresa';
+          this.usuarioActual = { ...user, empresaId: empId };
+          this.empresaActualId = empId;
           this.sesionIniciada = true;
           this.pantallaActual = 'dashboard';
+          this.suscribirDatosDeEmpresa(empId);
         }
       } catch {
         sessionStorage.removeItem('ticktock_user_tab');
@@ -966,10 +1073,11 @@ export class App implements OnInit, OnDestroy {
     this.formUbicacion = '';
     this.formHoraInicio = '';
     this.formHoraFin = '';
-    this.formMatricula = '';
     this.formTelefono = '';
-    this.formDepartamento = 'General';
+    this.formDepartamento = 'Administración';
     this.formDepartamentoPersonalizado = '';
+    this.verPassLogin = false;
+    this.verPassRegistro = false;
   }
 
   // --- CONFIGURACIÓN DE EMPRESA ---
@@ -984,6 +1092,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   async guardarConfiguracionEmpresa(): Promise<void> {
+    if (!this.empresaActualId) return;
     this.cargandoAccion = true;
     this.cdr.detectChanges();
 
@@ -994,11 +1103,10 @@ export class App implements OnInit, OnDestroy {
     }
 
     this.aplicarVariablesGlobalesCSS(this.empresa.colorTema || '#f97316');
-    localStorage.setItem('ticktock_empresa_cfg', JSON.stringify(this.empresa));
 
     try {
-      await this.registroService.guardarEmpresaConfig(this.empresa);
-      this.notificar('✅ Configuración, horario y color guardados para todos', 'exito');
+      await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
+      this.notificar('✅ Configuración, horario y color guardados para tu compañía', 'exito');
       this.mostrarModalEmpresa = false;
     } catch (e) {
       console.error(e);
@@ -1009,7 +1117,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- DETECCIÓN DE TURNO ACTIVO ---
+  // --- DETECCIÓN DE TURNO ACTIVO Y BLOQUEO POR QR EXPIRADO ---
   get registroActivo(): Registro | undefined {
     if (!this.usuarioActual) return undefined;
     const userEmail = (this.usuarioActual.correo || '').toLowerCase();
@@ -1024,6 +1132,46 @@ export class App implements OnInit, OnDestroy {
         (r.empleadoNombre && r.empleadoNombre.toLowerCase() === userName)
       )
     );
+  }
+
+  // Verifica si el estudiante dejó vencer los 15 min del QR hoy y quedó bloqueado
+  get entradaBloqueadaPorExpiracionHoy(): Registro | undefined {
+    if (!this.usuarioActual) return undefined;
+    const hoy = new Date().toLocaleDateString('es-ES');
+    const userEmail = (this.usuarioActual.correo || '').toLowerCase();
+    const userName = (this.usuarioActual.nombre || '').toLowerCase();
+
+    return this.registros.find(r =>
+      r.fecha === hoy &&
+      r.qrExpiradoSinEscanear === true &&
+      (
+        (r.empleadoId && String(r.empleadoId).toLowerCase() === userEmail) ||
+        (r.empleadoNombre && r.empleadoNombre.toLowerCase() === userName)
+      )
+    );
+  }
+
+  // Alertas visibles para el Encargado/Administrador cuando algún estudiante no escaneó a tiempo
+  get alertasQRExpiradoAdmin(): Registro[] {
+    return this.registros.filter(r => r.qrExpiradoSinEscanear === true && !r.alertaVistaPorAdmin);
+  }
+
+  async descartarAlertaAdmin(reg: Registro): Promise<void> {
+    reg.alertaVistaPorAdmin = true;
+    if (reg.id && !reg.id.startsWith('temp_')) {
+      await this.registroService.actualizarRegistro(reg.id, { alertaVistaPorAdmin: true });
+    }
+    this.cdr.detectChanges();
+  }
+
+  async habilitarReintentoAlumno(reg: Registro): Promise<void> {
+    if (!reg.id) return;
+    this.registros = this.registros.filter(r => r.id !== reg.id);
+    if (!reg.id.startsWith('temp_')) {
+      await this.registroService.eliminarRegistro(reg.id);
+    }
+    this.notificar(`🔓 Se habilitó nuevamente la entrada para ${reg.empleadoNombre}`, 'exito');
+    this.cdr.detectChanges();
   }
 
   get estaEnTurno(): boolean { return this.registroActivo?.estado === 'En Turno'; }
@@ -1042,16 +1190,21 @@ export class App implements OnInit, OnDestroy {
     );
     if (encontrado?.id) return encontrado.id;
 
-    const frescos = await this.registroService.obtenerRegistrosDirecto();
+    const frescos = await this.registroService.obtenerRegistrosDirecto(this.empresaActualId);
     const match = frescos.find(
       r => r.timestampEntrada === reg.timestampEntrada ||
-           (r.codigoQR && r.codigoQR === reg.codigoQR && r.estado !== 'Completado')
+           (r.codigoQR && r.codigoQR === reg.codigoQR && r.estado !== 'Completado' && r.estado !== 'Expirado')
     );
     return match?.id || null;
   }
 
   async marcarEntrada(): Promise<void> {
-    if (!this.usuarioActual || this.estaEnTurno || this.estaEnPausa || this.cargandoAccion) return;
+    if (!this.usuarioActual || !this.empresaActualId || this.estaEnTurno || this.estaEnPausa || this.cargandoAccion) return;
+
+    if (this.entradaBloqueadaPorExpiracionHoy) {
+      this.notificar('⛔ No puedes marcar entrada: Excediste los 15 min de tu QR anterior. Contacta al encargado.', 'alerta');
+      return;
+    }
 
     this.cargandoAccion = true;
     this.cdr.detectChanges();
@@ -1074,6 +1227,7 @@ export class App implements OnInit, OnDestroy {
 
     const nuevo: Registro = {
       id: 'temp_' + ahoraMs,
+      empresaId: this.empresaActualId,
       empleadoId: String(this.usuarioActual.correo).toLowerCase(),
       empleadoNombre: this.usuarioActual.nombre,
       puesto: this.usuarioActual.puesto || 'Estudiante / Colaborador',
@@ -1090,14 +1244,15 @@ export class App implements OnInit, OnDestroy {
       timestampQR: ahoraMs,
       codigoQR: pin,
       verificadoCamaraMovil: false,
-      horaEscaneoQR: ''
+      horaEscaneoQR: '',
+      qrExpiradoSinEscanear: false
     };
 
     this.registros = [nuevo, ...this.registros];
     this.observacionActual = '';
     await this.mostrarQRConTemporizador(pin, ahoraMs);
     this.recalcularCronometros();
-    this.notificar('🟢 Entrada iniciada. Escanea el QR con tu celular.', 'exito');
+    this.notificar('🟢 Entrada iniciada. Escanea el QR antes de 15 min o se anulará.', 'exito');
 
     try {
       const docRef = await this.registroService.agregarRegistro(nuevo);
@@ -1322,7 +1477,7 @@ export class App implements OnInit, OnDestroy {
       const horaExacta = ahora.toLocaleTimeString('es-ES');
       const LIMITE_15_MIN_MS = 15 * 60 * 1000;
 
-      const registrosFrescos = await this.registroService.obtenerRegistrosDirecto();
+      const registrosFrescos = await this.registroService.obtenerRegistrosDirecto(this.empresaActualId);
       if (registrosFrescos.length > 0) {
         this.registros = registrosFrescos.sort((a, b) => (b.timestampEntrada || 0) - (a.timestampEntrada || 0));
       }
@@ -1348,34 +1503,6 @@ export class App implements OnInit, OnDestroy {
           });
         }
 
-        this.detenerCamara();
-        this.mostrarModalQR = false;
-        this.recalcularCronometros();
-        this.notificar(`✅ ¡Código QR escaneado a las ${horaExacta}!`, 'exito');
-        return;
-      }
-
-      const registroCoincidente = this.registros.find(r => {
-        if (r.estado === 'Completado') return false;
-        const p = this.extraerSoloDigitosOPin(r.codigoQR);
-        return p && (p === pinIngresado || pinIngresado.includes(p));
-      });
-
-      if (registroCoincidente) {
-        const tsCreacion = registroCoincidente.timestampQR || registroCoincidente.timestampEntrada || 0;
-        if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_15_MIN_MS)) {
-          this.errorModalEscaner = '❌ Ese código QR ya caducó (pasaron más de 15 minutos).';
-          return;
-        }
-
-        registroCoincidente.verificadoCamaraMovil = true;
-        registroCoincidente.horaEscaneoQR = horaExacta;
-        if (registroCoincidente.id && !registroCoincidente.id.startsWith('temp_')) {
-          await this.registroService.actualizarRegistro(registroCoincidente.id, {
-            verificadoCamaraMovil: true,
-            horaEscaneoQR: horaExacta
-          });
-        }
         this.detenerCamara();
         this.mostrarModalQR = false;
         this.recalcularCronometros();
@@ -1610,7 +1737,7 @@ export class App implements OnInit, OnDestroy {
     this.notificar('📄 Reporte descargado correctamente', 'exito');
   }
 
-  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS REGISTRADOS ---
+  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS DE ESTA COMPAÑÍA ---
   get listaEstudiantesRegistrados(): Usuario[] {
     return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() !== 'admin');
   }
@@ -1641,6 +1768,7 @@ export class App implements OnInit, OnDestroy {
     );
 
     if (!regHoy) return '⚪ Sin marcaje hoy';
+    if (regHoy.estado === 'Expirado' || regHoy.qrExpiradoSinEscanear) return '⛔ QR Expirado (Bloqueado)';
     if (regHoy.estado === 'En Turno') return '🟢 En Turno (' + regHoy.horaEntrada + ')';
     if (regHoy.estado === 'En Pausa') return '☕ En Comida';
     return '✅ Completado';
@@ -1700,6 +1828,6 @@ export class App implements OnInit, OnDestroy {
     setTimeout(() => {
       this.mostrarToast = false;
       this.cdr.detectChanges();
-    }, 3800);
+    }, 4200);
   }
 }

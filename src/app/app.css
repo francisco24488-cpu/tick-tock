@@ -15,6 +15,115 @@ textarea::placeholder {
   opacity: 0.85;
 }
 
+/* Ojito de visibilidad de contraseña */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap .input-clean {
+  padding-right: 2.9rem;
+}
+
+.btn-toggle-pass {
+  position: absolute;
+  right: 0.65rem;
+  background: transparent;
+  border: none;
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.btn-toggle-pass:hover {
+  background: #e2e8f0;
+}
+
+/* Aviso registro exclusivo compañías */
+.company-only-notice {
+  background: var(--primary-soft);
+  border: 1px solid var(--primary-border);
+  color: #1e293b;
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  font-size: 0.83rem;
+  line-height: 1.4;
+}
+
+/* Alertas de QR expirado (Alumno y Encargado) */
+.qr-expired-lock-banner {
+  background: #fef2f2;
+  border: 1.5px solid #ef4444;
+  color: #991b1b;
+  padding: 0.9rem 1.15rem;
+  border-radius: 14px;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.admin-alerts-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-alert-card {
+  background: #fef2f2;
+  border: 1.5px solid #ef4444;
+  border-left: 6px solid #dc2626;
+  border-radius: 16px;
+  padding: 1rem 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.admin-alert-text {
+  color: #7f1d1d;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  flex: 1;
+  min-width: 240px;
+}
+
+.admin-alert-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.btn-unlock-student {
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-dismiss-alert {
+  background: #ffffff;
+  color: #7f1d1d;
+  border: 1px solid #fca5a5;
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.st-expirado {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 /* Banners de confirmación QR y verificación Gmail */
 .qr-scanned-banner {
   background: #f0fdf4;
@@ -28,40 +137,34 @@ textarea::placeholder {
   justify-content: space-between;
 }
 
-.verify-success-banner {
+.verify-success-banner,
+.verify-status-ok {
   background: #f0fdf4;
   border: 1.5px solid #22c55e;
   color: #15803d;
   padding: 0.85rem 1rem;
   border-radius: 14px;
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: 0.85rem;
+  font-weight: 600;
   text-align: left;
-}
-
-.gmail-verify-box {
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 1rem;
-}
-
-.gmail-verify-hint {
-  font-size: 0.84rem;
-  color: #334155;
   line-height: 1.45;
-  margin-bottom: 0.85rem;
 }
 
-.btn-gmail-open {
-  background: #ea4335;
-  color: #ffffff;
+.emailjs-setup-box {
+  background: #f8fafc;
+  border: 1px dashed #94a3b8;
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+}
+
+.btn-link-subtle {
+  background: transparent;
   border: none;
-  padding: 0.8rem 1rem;
-  border-radius: 12px;
-  font-weight: 800;
-  font-size: 0.88rem;
+  color: var(--primary-dark);
+  font-weight: 700;
+  font-size: 0.82rem;
   cursor: pointer;
+  padding: 0;
 }
 
 .btn-verify-pending {
@@ -980,7 +1083,6 @@ textarea::placeholder {
   margin-bottom: 0.8rem;
 }
 .welcome-title { font-size: 2.7rem; font-weight: 800; color: #0f172a; }
-.company-subtag { font-size: 1.1rem; color: var(--primary-dark); font-weight: 700; margin-bottom: 0.6rem; }
 .welcome-lead { font-size: 0.92rem; color: #64748b; margin-bottom: 2rem; }
 .welcome-actions { display: flex; flex-direction: column; gap: 0.85rem; }
 .btn-hero-primary {

@@ -5,42 +5,74 @@
     <span class="toast-text">{{ mensajeToast }}</span>
   </div>
 
-  <!-- MODAL VERIFICACIÓN EN 2 PASOS POR GMAIL ("¿Eres tú?") -->
+  <!-- MODAL VERIFICACIÓN EN 2 PASOS POR GMAIL (ENVÍO DIRECTO DE CÓDIGO) -->
   <div class="modal-overlay" *ngIf="mostrarModalVerificacionGmail && usuarioPendienteVerificacion">
-    <div class="modal-card">
+    <div class="modal-card modal-scroll">
       <div class="modal-badge-live">🔐 VERIFICACIÓN EN 2 PASOS • GMAIL</div>
-      <h3 class="modal-title">¿Eres tú quien se está registrando?</h3>
+      <h3 class="modal-title">Verifica tu correo Gmail</h3>
       <p class="modal-sub">
-        Para completar el registro de <strong>{{ usuarioPendienteVerificacion.nombre }}</strong>, confirma desde el correo Gmail:
+        Para activar la cuenta de <strong>{{ usuarioPendienteVerificacion.nombre }}</strong>, enviamos un código de verificación de 6 dígitos al correo:
         <br><strong>{{ usuarioPendienteVerificacion.correo }}</strong>
       </p>
 
-      <div class="gmail-verify-box margin-b">
-        <p class="gmail-verify-hint">
-          1. Abre Gmail y envía/revisa el mensaje de confirmación con el enlace <strong>"Sí, soy yo"</strong>.<br>
-          2. Al hacer clic en <strong>"Sí, soy yo"</strong> en Gmail, esta ventana se actualizará automáticamente al instante.
-        </p>
+      <div class="verify-status-ok margin-b" *ngIf="correoEnviadoExito">
+        📩 ¡Código enviado! Revisa la bandeja de entrada (o Spam) de <strong>{{ usuarioPendienteVerificacion.correo }}</strong> e ingrésalo abajo.
+      </div>
 
-        <button type="button" class="btn-gmail-open width-100" (click)="abrirGmailParaConfirmar()">
-          📧 Abrir Gmail y Enviar Confirmación ("¿Eres tú?")
-        </button>
+      <div class="modal-error-banner" *ngIf="errorEnvioGmail">
+        {{ errorEnvioGmail }}
       </div>
 
       <div class="form-group margin-b">
-        <label>O escribe el código de 6 dígitos enviado a Gmail:</label>
+        <label>Ingresa el código de 6 dígitos recibido en Gmail:</label>
         <input
           type="text"
+          maxlength="6"
           class="input-clean text-center font-mono-bold"
           [(ngModel)]="codigoVerificacionIngresado"
           (keyup.enter)="confirmarCodigoVerificacion2Pasos()"
-          placeholder="Ej: 492810">
+          placeholder="000000">
       </div>
 
-      <div class="modal-actions">
-        <button type="button" class="btn-cancel-modal" (click)="cerrarModalVerificacionGmail()">Cerrar</button>
-        <button type="button" class="btn-confirm-primary" (click)="confirmarCodigoVerificacion2Pasos()" [disabled]="cargandoAccion">
-          ✅ Sí, soy yo (Confirmar)
+      <div class="modal-actions margin-b">
+        <button type="button" class="btn-cancel-modal" (click)="reenviarCodigoVerificacion()" [disabled]="enviandoCorreoGmail">
+          {{ enviandoCorreoGmail ? 'Enviando...' : '🔄 Reenviar Código' }}
         </button>
+        <button type="button" class="btn-confirm-primary" (click)="confirmarCodigoVerificacion2Pasos()" [disabled]="cargandoAccion">
+          ✅ Verificar Código
+        </button>
+      </div>
+
+      <!-- Configuración rápida de EmailJS si la compañía aún no la ha conectado -->
+      <div class="emailjs-setup-box">
+        <button type="button" class="btn-link-subtle" (click)="mostrarConfigEmailJSInline = !mostrarConfigEmailJSInline">
+          ⚙️ {{ mostrarConfigEmailJSInline ? 'Ocultar configuración de envío Gmail' : 'Configurar envío automático Gmail (EmailJS)' }}
+        </button>
+
+        <div *ngIf="mostrarConfigEmailJSInline" class="margin-top">
+          <p class="sub-text-gray margin-b">
+            Conecta tu cuenta gratuita de <strong>emailjs.com</strong> (con tu Gmail) para enviar códigos reales al instante:
+          </p>
+          <div class="form-group margin-b">
+            <label>Service ID:</label>
+            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsServiceId" placeholder="Ej: service_xxxxxxx">
+          </div>
+          <div class="form-group margin-b">
+            <label>Template ID (usa la variable &#123;&#123;codigo&#125;&#125; y &#123;&#123;to_email&#125;&#125;):</label>
+            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsTemplateId" placeholder="Ej: template_xxxxxxx">
+          </div>
+          <div class="form-group margin-b">
+            <label>Public Key:</label>
+            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsPublicKey" placeholder="Ej: user_xxxxxxxxxxxx">
+          </div>
+          <button type="button" class="btn-confirm-primary width-100" (click)="guardarConfigEmailJSYReenviar()">
+            💾 Guardar y Enviar Código Ahora
+          </button>
+        </div>
+      </div>
+
+      <div class="margin-top text-center">
+        <button type="button" class="btn-cancel-modal width-100" (click)="cerrarModalVerificacionGmail()">Cerrar</button>
       </div>
     </div>
   </div>
@@ -52,7 +84,7 @@
         {{ tiempoRestanteQR > 0 ? '⏱️ TIEMPO RESTANTE QR: ' + formatearSegundos(tiempoRestanteQR) : '🔴 CÓDIGO CADUCADO' }}
       </div>
       <h3 class="modal-title">📱 Escanea con tu Celular</h3>
-      <p class="modal-sub">Apunta la cámara de tu teléfono al QR. En cuanto lo escanees, esta ventana desaparecerá automáticamente:</p>
+      <p class="modal-sub">Apunta la cámara de tu teléfono al QR antes de que llegue a 00:00 o tu entrada se cancelará:</p>
 
       <div class="qr-display-box">
         <img [src]="qrImagenUrl" alt="Código QR de Asistencia" class="qr-image" [class.qr-blur]="tiempoRestanteQR === 0">
@@ -104,14 +136,14 @@
     </div>
   </div>
 
-  <!-- MODAL CONFIGURACIÓN DE EMPRESA, HORARIO Y COLOR -->
+  <!-- MODAL CONFIGURACIÓN DE EMPRESA, HORARIO, COLOR Y CORREO GMAIL -->
   <div class="modal-overlay" *ngIf="mostrarModalEmpresa">
     <div class="modal-card modal-scroll">
-      <h3 class="modal-title">⚙️ Configuración de Empresa y Colores</h3>
-      <p class="modal-sub">Personaliza los datos, el horario y el color de toda la aplicación:</p>
+      <h3 class="modal-title">⚙️ Configuración de Tu Compañía</h3>
+      <p class="modal-sub">Estos ajustes aplican exclusivamente para <strong>{{ empresa.nombre }}</strong>:</p>
 
       <div class="color-picker-box margin-b">
-        <label>🎨 Color Principal de la Página (Se actualiza al instante para todos):</label>
+        <label>🎨 Color Principal de Tu Compañía (Tiempo Real):</label>
         <div class="color-swatches-row">
           <button
             type="button"
@@ -170,6 +202,22 @@
       </div>
 
       <div class="toggles-box margin-b">
+        <h4>📧 Envío Automático de Códigos de Verificación Gmail (EmailJS)</h4>
+        <div class="form-group margin-b">
+          <label>Service ID:</label>
+          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsServiceId" placeholder="Ej: service_xxxxxxx">
+        </div>
+        <div class="form-group margin-b">
+          <label>Template ID:</label>
+          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsTemplateId" placeholder="Ej: template_xxxxxxx">
+        </div>
+        <div class="form-group">
+          <label>Public Key:</label>
+          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsPublicKey" placeholder="Ej: user_xxxxxxxxxxxx">
+        </div>
+      </div>
+
+      <div class="toggles-box margin-b">
         <h4>🎛️ Habilitar o Deshabilitar Funciones</h4>
 
         <label class="toggle-row">
@@ -224,11 +272,11 @@
     </div>
   </div>
 
-  <!-- MODAL ALTA ALUMNO POR ADMIN (CON DEPARTAMENTO PERSONALIZADO) -->
+  <!-- MODAL ALTA ALUMNO POR ADMIN (CON OJITO EN CONTRASEÑA Y DEPARTAMENTO LIBRE) -->
   <div class="modal-overlay" *ngIf="mostrarModalNuevoEstudiante">
     <div class="modal-card modal-scroll">
       <h3 class="modal-title">➕ Registrar Nuevo Alumno</h3>
-      <p class="modal-sub">Crea las credenciales de acceso y envía la verificación en 2 pasos por Gmail:</p>
+      <p class="modal-sub">El estudiante quedará registrado exclusivamente en <strong>{{ empresa.nombre }}</strong>:</p>
 
       <div class="form-group margin-b">
         <label>Nombre Completo:</label>
@@ -242,7 +290,16 @@
 
       <div class="form-group margin-b">
         <label>Contraseña:</label>
-        <input type="password" class="input-clean" [(ngModel)]="adminNuevoPassword" placeholder="Escribe una contraseña">
+        <div class="password-input-wrap">
+          <input
+            [type]="verPassNuevoAlumno ? 'text' : 'password'"
+            class="input-clean"
+            [(ngModel)]="adminNuevoPassword"
+            placeholder="Escribe una contraseña">
+          <button type="button" class="btn-toggle-pass" (click)="verPassNuevoAlumno = !verPassNuevoAlumno" title="Mostrar u ocultar contraseña">
+            {{ verPassNuevoAlumno ? '🙈' : '👁️' }}
+          </button>
+        </div>
       </div>
 
       <div class="form-row margin-b" *ngIf="empresa.habilitarFormEstudiantes">
@@ -276,13 +333,13 @@
       <div class="modal-actions">
         <button type="button" class="btn-cancel-modal" (click)="cerrarModalNuevoEstudiante()">Cancelar</button>
         <button type="button" class="btn-confirm-primary" (click)="registrarEstudiantePorAdmin()" [disabled]="cargandoAccion">
-          {{ cargandoAccion ? 'Guardando...' : '💾 Guardar y Verificar Gmail' }}
+          {{ cargandoAccion ? 'Guardando...' : '💾 Guardar y Enviar Código Gmail' }}
         </button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL EDITAR ESTUDIANTE (ADMIN) -->
+  <!-- MODAL EDITAR ESTUDIANTE (ADMIN - CON OJITO EN CONTRASEÑA) -->
   <div class="modal-overlay" *ngIf="mostrarModalEditarEstudiante">
     <div class="modal-card modal-scroll">
       <h3 class="modal-title">✏️ Editar Datos del Estudiante</h3>
@@ -327,8 +384,17 @@
       </div>
 
       <div class="form-group margin-b">
-        <label>Contraseña (opcional):</label>
-        <input type="text" class="input-clean" [(ngModel)]="editEstudiantePassword" placeholder="Contraseña del alumno">
+        <label>Contraseña:</label>
+        <div class="password-input-wrap">
+          <input
+            [type]="verPassEditarAlumno ? 'text' : 'password'"
+            class="input-clean"
+            [(ngModel)]="editEstudiantePassword"
+            placeholder="Contraseña del alumno">
+          <button type="button" class="btn-toggle-pass" (click)="verPassEditarAlumno = !verPassEditarAlumno" title="Mostrar u ocultar contraseña">
+            {{ verPassEditarAlumno ? '🙈' : '👁️' }}
+          </button>
+        </div>
       </div>
 
       <div class="modal-actions">
@@ -340,36 +406,35 @@
     </div>
   </div>
 
-  <!-- 1. PANTALLA DE BIENVENIDA -->
+  <!-- 1. PANTALLA DE BIENVENIDA NEUTRAL -->
   <div class="welcome-screen" *ngIf="pantallaActual === 'bienvenida'">
     <div class="welcome-card-hero">
       <div class="hero-badge">⏱️ CONTROL DE ASISTENCIA QR</div>
       <h1 class="welcome-title">TickTock</h1>
-      <div class="company-subtag" *ngIf="empresa.nombre">🏢 {{ empresa.nombre }}</div>
-      <p class="welcome-lead" *ngIf="empresa.ubicacion">📍 {{ empresa.ubicacion }}</p>
-      <p class="welcome-lead" *ngIf="!empresa.ubicacion">Plataforma inteligente de registro de entradas, horarios y actividades.</p>
+      <p class="welcome-lead">Plataforma multi-empresa de registro de entradas con código QR, horarios y actividades en tiempo real.</p>
 
       <div class="verify-success-banner margin-b" *ngIf="mensajeExitoVerificacionLink">
         {{ mensajeExitoVerificacionLink }}
       </div>
 
       <div class="welcome-actions">
-        <button type="button" class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión</button>
-        <button type="button" class="btn-hero-secondary" (click)="irAAuth('registro')">📝 Registrar Compañía o Cuenta</button>
+        <button type="button" class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión (Compañía o Alumno)</button>
+        <button type="button" class="btn-hero-secondary" (click)="irAAuth('registro')">🏢 Registrar Nueva Compañía</button>
       </div>
     </div>
   </div>
 
-  <!-- 2. LOGIN / REGISTRO -->
+  <!-- 2. LOGIN / REGISTRO EXCLUSIVO DE COMPAÑÍA -->
   <div class="auth-screen" *ngIf="pantallaActual === 'login' || pantallaActual === 'registro'">
     <div class="auth-card">
       <button type="button" class="btn-back-link" (click)="irABienvenida()">← Volver al Inicio</button>
 
       <div class="auth-tabs">
         <button type="button" [class.active]="tabAuth === 'login'" (click)="irAAuth('login')">Iniciar Sesión</button>
-        <button type="button" [class.active]="tabAuth === 'registro'" (click)="irAAuth('registro')">Registrarse</button>
+        <button type="button" [class.active]="tabAuth === 'registro'" (click)="irAAuth('registro')">Registrar Compañía</button>
       </div>
 
+      <!-- FORMULARIO INICIAR SESIÓN -->
       <form *ngIf="tabAuth === 'login'" (ngSubmit)="ejecutarLogin()">
         <div class="form-group margin-b">
           <label>Correo Electrónico:</label>
@@ -377,17 +442,33 @@
         </div>
         <div class="form-group margin-b">
           <label>Contraseña:</label>
-          <input type="password" class="input-clean" [(ngModel)]="formPassword" name="password" placeholder="Ingresa tu contraseña" required>
+          <div class="password-input-wrap">
+            <input
+              [type]="verPassLogin ? 'text' : 'password'"
+              class="input-clean"
+              [(ngModel)]="formPassword"
+              name="password"
+              placeholder="Ingresa tu contraseña"
+              required>
+            <button type="button" class="btn-toggle-pass" (click)="verPassLogin = !verPassLogin" title="Mostrar u ocultar contraseña">
+              {{ verPassLogin ? '🙈' : '👁️' }}
+            </button>
+          </div>
         </div>
         <button type="submit" class="btn-confirm-primary width-100" [disabled]="cargandoAccion">
           {{ cargandoAccion ? 'Verificando...' : 'Entrar a TickTock' }}
         </button>
       </form>
 
+      <!-- FORMULARIO REGISTRO EXCLUSIVO PARA COMPAÑÍAS -->
       <form *ngIf="tabAuth === 'registro'" (ngSubmit)="ejecutarRegistro()">
+        <div class="company-only-notice margin-b">
+          🏢 <strong>Registro de Compañía / Institución:</strong> Crea el espacio independiente de tu organización. Una vez dentro, podrás registrar a todos tus alumnos.
+        </div>
+
         <div class="form-group margin-b">
-          <label>Nombre de la Compañía:</label>
-          <input type="text" class="input-clean" [(ngModel)]="formEmpresaNombre" name="empresaNombre" placeholder="Ej: Mi Empresa o Institución">
+          <label>Nombre de la Compañía / Institución *:</label>
+          <input type="text" class="input-clean" [(ngModel)]="formEmpresaNombre" name="empresaNombre" placeholder="Ej: Instituto Tecnológico / Mi Empresa" required>
         </div>
 
         <div class="form-group margin-b">
@@ -401,7 +482,7 @@
         </div>
 
         <div class="form-group margin-b">
-          <label>Horario:</label>
+          <label>Horario de Jornada:</label>
           <div class="schedule-duo-grid">
             <div class="schedule-select-wrap">
               <span class="schedule-tag">De:</span>
@@ -421,38 +502,35 @@
         </div>
 
         <div class="form-group margin-b">
-          <label>Tu Nombre Completo:</label>
+          <label>Nombre del Encargado / Administrador *:</label>
           <input type="text" class="input-clean" [(ngModel)]="formNombre" name="nombre" placeholder="Ej: Juan Pérez López" required>
         </div>
 
         <div class="form-group margin-b">
-          <label>Correo Electrónico (Gmail):</label>
-          <input type="email" class="input-clean" [(ngModel)]="formCorreo" name="correo" placeholder="Ej: juan@gmail.com" required>
+          <label>Correo Electrónico del Encargado (Gmail) *:</label>
+          <input type="email" class="input-clean" [(ngModel)]="formCorreo" name="correo" placeholder="Ej: encargado@gmail.com" required>
         </div>
 
         <div class="form-group margin-b">
-          <label>Contraseña:</label>
-          <input type="password" class="input-clean" [(ngModel)]="formPassword" name="password" placeholder="Crea una contraseña" required>
-        </div>
-
-        <div class="form-row margin-b" *ngIf="empresa.habilitarFormEstudiantes">
-          <div class="form-group flex-1">
-            <label>Matrícula / ID:</label>
-            <input type="text" class="input-clean" [(ngModel)]="formMatricula" name="matricula" placeholder="Ej: 2026-001">
-          </div>
-          <div class="form-group flex-1">
-            <label>Teléfono:</label>
-            <input type="text" class="input-clean" [(ngModel)]="formTelefono" name="telefono" placeholder="Ej: 4181234567">
+          <label>Contraseña *:</label>
+          <div class="password-input-wrap">
+            <input
+              [type]="verPassRegistro ? 'text' : 'password'"
+              class="input-clean"
+              [(ngModel)]="formPassword"
+              name="password"
+              placeholder="Crea una contraseña"
+              required>
+            <button type="button" class="btn-toggle-pass" (click)="verPassRegistro = !verPassRegistro" title="Mostrar u ocultar contraseña">
+              {{ verPassRegistro ? '🙈' : '👁️' }}
+            </button>
           </div>
         </div>
 
         <div class="form-row margin-b">
           <div class="form-group flex-1">
-            <label>Tipo de Cuenta:</label>
-            <select class="select-clean" [(ngModel)]="formRol" name="rol">
-              <option value="estudiante">👤 Alumno / Estudiante</option>
-              <option value="admin">👑 Administrador / Encargado</option>
-            </select>
+            <label>Teléfono de Contacto:</label>
+            <input type="text" class="input-clean" [(ngModel)]="formTelefono" name="telefono" placeholder="Ej: 4181234567">
           </div>
           <div class="form-group flex-1">
             <label>Departamento / Área:</label>
@@ -464,7 +542,7 @@
         </div>
 
         <div class="form-group margin-b" *ngIf="formDepartamento === '__OTRO__'">
-          <label>Escribe tu Departamento / Área:</label>
+          <label>Escribe el Departamento / Área:</label>
           <input
             type="text"
             class="input-clean"
@@ -474,13 +552,13 @@
         </div>
 
         <button type="submit" class="btn-confirm-primary width-100" [disabled]="cargandoAccion">
-          {{ cargandoAccion ? 'Creando cuenta...' : 'Crear Cuenta y Verificar Gmail' }}
+          {{ cargandoAccion ? 'Creando compañía...' : '🏢 Registrar Compañía y Verificar Gmail' }}
         </button>
       </form>
     </div>
   </div>
 
-  <!-- 3. PANEL PRINCIPAL (DASHBOARD) -->
+  <!-- 3. PANEL PRINCIPAL (DASHBOARD AISLADO POR COMPAÑÍA) -->
   <ng-container *ngIf="pantallaActual === 'dashboard' && usuarioActual">
     <header class="welcome-hero">
       <div class="hero-brand">
@@ -511,7 +589,7 @@
       <div class="info-chips">
         <span class="chip">📍 Área: <strong>{{ usuarioActual.departamento }}</strong></span>
         <button type="button" class="chip-edit-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="abrirModalEmpresa()">
-          ⚙️ Configuración & Horarios
+          ⚙️ Configuración & Gmail
         </button>
         <button type="button" class="chip-refresh-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="recargarDatosDesdeNube(true)">
           🔄 Actualizar Lista
@@ -564,6 +642,13 @@
           </div>
         </div>
 
+        <!-- Aviso de bloqueo si excedió los 15 minutos del QR sin escanear -->
+        <div class="qr-expired-lock-banner margin-b" *ngIf="!estaEnTurno && !estaEnPausa && entradaBloqueadaPorExpiracionHoy">
+          <div>
+            <strong>⛔ No puedes marcar entrada:</strong> El cronómetro de 15 minutos llegó a <code>00:00</code> sin que escanearas tu código QR. Tu registro fue anulado y ya se avisó al encargado.
+          </div>
+        </div>
+
         <!-- Banner de confirmación cuando el QR ya fue escaneado en tiempo real -->
         <div class="qr-scanned-banner margin-b" *ngIf="(estaEnTurno || estaEnPausa) && registroActivo?.verificadoCamaraMovil">
           <span>✅ <strong>Código QR Escaneado</strong> correctamente a las <strong>{{ registroActivo?.horaEscaneoQR }}</strong></span>
@@ -608,17 +693,17 @@
 
           <!-- Botones Principales según etapa del turno -->
           <div class="student-main-actions">
-            <!-- ETAPA 1: Sin turno activo -> SOLO aparece Marcar Entrada -->
+            <!-- ETAPA 1: Sin turno activo -> SOLO aparece Marcar Entrada (bloqueado si expiró su QR hoy) -->
             <ng-container *ngIf="!estaEnTurno && !estaEnPausa">
               <button
                 type="button"
                 class="btn-student-hero btn-primary-theme"
                 (click)="marcarEntrada()"
-                [disabled]="cargandoAccion">
-                <span class="btn-big-icon">🟢</span>
+                [disabled]="cargandoAccion || !!entradaBloqueadaPorExpiracionHoy">
+                <span class="btn-big-icon">{{ entradaBloqueadaPorExpiracionHoy ? '⛔' : '🟢' }}</span>
                 <div>
-                  <strong>Marcar Entrada</strong>
-                  <small>Iniciar mi turno y generar QR</small>
+                  <strong>{{ entradaBloqueadaPorExpiracionHoy ? 'Entrada Bloqueada (QR Expirado)' : 'Marcar Entrada' }}</strong>
+                  <small>{{ entradaBloqueadaPorExpiracionHoy ? 'Se notificó al encargado' : 'Iniciar mi turno y generar QR' }}</small>
                 </div>
               </button>
             </ng-container>
@@ -733,14 +818,14 @@
                   <td>{{ reg.fecha }}</td>
                   <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
                   <td>
-                    <span class="badge-status" [ngClass]="{'st-turno': reg.verificadoCamaraMovil, 'st-pausa': !reg.verificadoCamaraMovil}">
-                      {{ reg.verificadoCamaraMovil ? '✅ Escaneado (' + reg.horaEscaneoQR + ')' : '⏳ Pendiente' }}
+                    <span class="badge-status" [ngClass]="{'st-turno': reg.verificadoCamaraMovil, 'st-expirado': reg.qrExpiradoSinEscanear, 'st-pausa': !reg.verificadoCamaraMovil && !reg.qrExpiradoSinEscanear}">
+                      {{ reg.verificadoCamaraMovil ? '✅ Escaneado (' + reg.horaEscaneoQR + ')' : (reg.qrExpiradoSinEscanear ? '⛔ Expirado' : '⏳ Pendiente') }}
                     </span>
                   </td>
                   <td>{{ reg.horaPausaInicio ? reg.horaPausaInicio + (reg.horaPausaFin ? ' - ' + reg.horaPausaFin : ' (En curso)') : '--' }}</td>
                   <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
                   <td>
-                    <span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">
+                    <span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado','st-expirado': reg.estado==='Expirado'}">
                       {{ reg.estado }}
                     </span>
                   </td>
@@ -757,12 +842,29 @@
 
       <!-- ==================== VISTA ADMINISTRADOR ==================== -->
       <section class="card" *ngIf="usuarioActual.rol === 'admin'">
+        <!-- ALERTAS EN TIEMPO REAL CUANDO UN ALUMNO NO ESCANEÓ EL QR EN LOS 15 MINUTOS -->
+        <div class="admin-alerts-stack margin-b" *ngIf="alertasQRExpiradoAdmin.length > 0">
+          <div class="admin-alert-card" *ngFor="let alerta of alertasQRExpiradoAdmin">
+            <div class="admin-alert-text">
+              <strong>🚨 Aviso para el Encargado:</strong> El alumno <strong>{{ alerta.empleadoNombre }}</strong> ({{ alerta.departamento }}) marcó entrada a las <strong>{{ alerta.horaEntrada }}</strong> pero <strong>NO escaneó su código QR dentro de los 15 minutos</strong>. Su entrada fue anulada y bloqueada.
+            </div>
+            <div class="admin-alert-actions">
+              <button type="button" class="btn-unlock-student" (click)="habilitarReintentoAlumno(alerta)">
+                🔓 Permitir Reintento
+              </button>
+              <button type="button" class="btn-dismiss-alert" (click)="descartarAlertaAdmin(alerta)">
+                ✔️ Enterado
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="kpi-grid">
           <div class="kpi-box kpi-highlight">
             <div class="kpi-icon icon-theme">🎓</div>
             <div>
               <h3>{{ totalEstudiantes }}</h3>
-              <span>Alumnos Registrados</span>
+              <span>Alumnos en {{ empresa.nombre }}</span>
             </div>
           </div>
           <div class="kpi-box">
@@ -791,8 +893,8 @@
         <div class="students-roster-panel margin-top-2">
           <div class="table-header-bar">
             <div>
-              <h3>🎓 Alumnos Registrados ({{ totalEstudiantes }} en total)</h3>
-              <p class="sub-text-gray">Lista completa de estudiantes (puedes editar sus datos o verificar su correo Gmail):</p>
+              <h3>🎓 Alumnos Registrados en {{ empresa.nombre }} ({{ totalEstudiantes }} en total)</h3>
+              <p class="sub-text-gray">Base de datos exclusiva de tu compañía (puedes editar datos o verificar su correo Gmail):</p>
             </div>
             <button type="button" class="btn-confirm-primary" (click)="abrirModalNuevoEstudiante()">
               ➕ Registrar Alumno
@@ -837,7 +939,7 @@
                       type="button"
                       class="btn-verify-pending"
                       (click)="reenviarVerificacionAlumno(alumno)">
-                      ⏳ Confirmar Gmail
+                      📩 Verificar Gmail
                     </button>
                   </td>
                   <td><span class="badge-status st-completado">{{ obtenerEstadoHoyAlumno(alumno) }}</span></td>
@@ -852,7 +954,7 @@
                 </tr>
                 <tr *ngIf="estudiantesFiltradosAdmin.length === 0">
                   <td colspan="9" class="empty-row">
-                    No hay alumnos registrados todavía. Haz clic en "➕ Registrar Alumno" para agregar uno.
+                    No hay alumnos registrados todavía en esta compañía. Haz clic en "➕ Registrar Alumno" para agregar uno.
                   </td>
                 </tr>
               </tbody>
@@ -862,7 +964,7 @@
 
         <div class="table-header-bar margin-top-2">
           <div>
-            <h3>📊 Bitácora General de Asistencia</h3>
+            <h3>📊 Bitácora General de Asistencia ({{ empresa.nombre }})</h3>
             <p class="sub-text-gray">Reportes habilitados en la configuración:</p>
           </div>
 
@@ -886,6 +988,7 @@
             <option value="En Turno">🟢 En Turno</option>
             <option value="En Pausa">☕ En Pausa</option>
             <option value="Completado">✅ Completados</option>
+            <option value="Expirado">⛔ QR Expirado</option>
           </select>
         </div>
 
@@ -914,14 +1017,14 @@
                 <td><span class="tag-time in">🟢 {{ reg.horaEntrada }}</span></td>
                 <td><code class="qr-code-text">{{ reg.codigoQR || '--' }}</code></td>
                 <td>
-                  <span class="badge-status" [ngClass]="{'st-turno': reg.verificadoCamaraMovil, 'st-pausa': !reg.verificadoCamaraMovil}">
-                    {{ reg.verificadoCamaraMovil ? '✅ SÍ (' + reg.horaEscaneoQR + ')' : '⏳ PENDIENTE' }}
+                  <span class="badge-status" [ngClass]="{'st-turno': reg.verificadoCamaraMovil, 'st-expirado': reg.qrExpiradoSinEscanear, 'st-pausa': !reg.verificadoCamaraMovil && !reg.qrExpiradoSinEscanear}">
+                    {{ reg.verificadoCamaraMovil ? '✅ SÍ (' + reg.horaEscaneoQR + ')' : (reg.qrExpiradoSinEscanear ? '⛔ EXPIRADO' : '⏳ PENDIENTE') }}
                   </span>
                 </td>
                 <td>{{ reg.horaPausaInicio ? reg.horaPausaInicio + (reg.horaPausaFin ? ' - ' + reg.horaPausaFin : '') : '--' }}</td>
                 <td><span class="tag-time out" *ngIf="reg.horaSalida">🔴 {{ reg.horaSalida }}</span><span *ngIf="!reg.horaSalida">--:--</span></td>
                 <td>
-                  <span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado'}">
+                  <span class="badge-status" [ngClass]="{'st-turno': reg.estado==='En Turno','st-pausa': reg.estado==='En Pausa','st-completado': reg.estado==='Completado','st-expirado': reg.estado==='Expirado'}">
                     {{ reg.estado }}
                   </span>
                 </td>
@@ -929,7 +1032,7 @@
                 <td><button type="button" class="btn-delete-row" (click)="eliminarRegistro(reg.id)">🗑️</button></td>
               </tr>
               <tr *ngIf="registrosFiltrados.length === 0">
-                <td colspan="11" class="empty-row">No hay registros para mostrar.</td>
+                <td colspan="11" class="empty-row">No hay registros para mostrar en esta compañía.</td>
               </tr>
             </tbody>
           </table>

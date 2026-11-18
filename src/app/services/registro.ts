@@ -16,6 +16,7 @@ import {
 import { Observable } from 'rxjs';
 
 export interface Empresa {
+  id?: string;
   nombre: string;
   sucursal: string;
   ubicacion: string;
@@ -35,14 +36,9 @@ export interface Empresa {
   emailjsPublicKey?: string;
 }
 
-export interface QrKioscoActivo {
-  codigo: string;
-  timestamp: number;
-  generadoPor: string;
-}
-
 export interface Usuario {
   id?: string;
+  empresaId: string;
   nombre: string;
   correo: string;
   password?: string;
@@ -67,6 +63,7 @@ export interface ActividadItem {
 
 export interface Registro {
   id?: string;
+  empresaId: string;
   empleadoId: string;
   empleadoNombre: string;
   puesto: string;
@@ -81,7 +78,7 @@ export interface Registro {
   comidaTerminada?: boolean;
   segundosComidaUsados?: number;
   totalHoras?: string;
-  estado: 'En Turno' | 'En Pausa' | 'Completado';
+  estado: 'En Turno' | 'En Pausa' | 'Completado' | 'Expirado';
   observacion: string;
   actividades?: ActividadItem[];
   actividadRegistrada?: boolean;
@@ -91,6 +88,8 @@ export interface Registro {
   timestampQR?: number;
   verificadoCamaraMovil?: boolean;
   horaEscaneoQR?: string;
+  qrExpiradoSinEscanear?: boolean;
+  alertaVistaPorAdmin?: boolean;
 }
 
 @Injectable({
@@ -102,15 +101,16 @@ export class RegistroService {
     private ngZone: NgZone
   ) {}
 
-  // Escucha en tiempo real dentro de NgZone para actualización instantánea en pantalla
-  getEmpresaConfig(): Observable<Empresa | undefined> {
+  // --- CONFIGURACIÓN AISLADA POR COMPAÑÍA (empresas/{empresaId}) ---
+  getEmpresaConfigById(empresaId: string): Observable<Empresa | undefined> {
     return new Observable<Empresa | undefined>((subscriber) => {
-      const configDoc = doc(this.firestore, 'configuracion/empresa');
+      const id = empresaId || 'default_empresa';
+      const configDoc = doc(this.firestore, `empresas/${id}`);
       const unsub = onSnapshot(
         configDoc,
         (snap) => {
           this.ngZone.run(() => {
-            subscriber.next(snap.exists() ? (snap.data() as Empresa) : undefined);
+            subscriber.next(snap.exists() ? ({ ...(snap.data() as Empresa), id: snap.id }) : undefined);
           });
         },
         (error) => {
@@ -121,61 +121,32 @@ export class RegistroService {
     });
   }
 
-  async obtenerEmpresaConfigDirecto(): Promise<Empresa | null> {
+  async obtenerEmpresaConfigDirecto(empresaId: string): Promise<Empresa | null> {
     try {
-      const configDoc = doc(this.firestore, 'configuracion/empresa');
+      const id = empresaId || 'default_empresa';
+      const configDoc = doc(this.firestore, `empresas/${id}`);
       const snap = await getDoc(configDoc);
-      return snap.exists() ? (snap.data() as Empresa) : null;
+      return snap.exists() ? ({ ...(snap.data() as Empresa), id: snap.id }) : null;
     } catch (e) {
       console.error('Error leyendo configuración de empresa:', e);
       return null;
     }
   }
 
-  guardarEmpresaConfig(empresa: Empresa): Promise<void> {
-    const configDoc = doc(this.firestore, 'configuracion/empresa');
-    return setDoc(configDoc, empresa, { merge: true });
+  guardarEmpresaConfig(empresaId: string, empresa: Empresa): Promise<void> {
+    const id = empresaId || 'default_empresa';
+    const configDoc = doc(this.firestore, `empresas/${id}`);
+    return setDoc(configDoc, { ...empresa, id }, { merge: true });
   }
 
-  getQrKiosco(): Observable<QrKioscoActivo | undefined> {
-    return new Observable<QrKioscoActivo | undefined>((subscriber) => {
-      const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
-      const unsub = onSnapshot(
-        qrDoc,
-        (snap) => {
-          this.ngZone.run(() => {
-            subscriber.next(snap.exists() ? (snap.data() as QrKioscoActivo) : undefined);
-          });
-        },
-        (error) => {
-          this.ngZone.run(() => subscriber.error(error));
-        }
-      );
-      return () => unsub();
-    });
-  }
-
-  async obtenerQrKioscoDirecto(): Promise<QrKioscoActivo | null> {
-    try {
-      const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
-      const snap = await getDoc(qrDoc);
-      return snap.exists() ? (snap.data() as QrKioscoActivo) : null;
-    } catch (e) {
-      console.error('Error leyendo QR kiosco:', e);
-      return null;
-    }
-  }
-
-  guardarQrKiosco(qr: QrKioscoActivo): Promise<void> {
-    const qrDoc = doc(this.firestore, 'configuracion/qr_kiosco');
-    return setDoc(qrDoc, qr);
-  }
-
-  getRegistros(): Observable<Registro[]> {
+  // --- REGISTROS FILTRADOS ÚNICAMENTE PARA LA COMPAÑÍA ACTIVA ---
+  getRegistrosByEmpresa(empresaId: string): Observable<Registro[]> {
     return new Observable<Registro[]>((subscriber) => {
+      const id = empresaId || 'default_empresa';
       const registrosRef = collection(this.firestore, 'registros');
+      const q = query(registrosRef, where('empresaId', '==', id));
       const unsub = onSnapshot(
-        registrosRef,
+        q,
         (snap) => {
           this.ngZone.run(() => {
             const lista = snap.docs.map((d) => ({ ...(d.data() as Registro), id: d.id }));
@@ -190,10 +161,12 @@ export class RegistroService {
     });
   }
 
-  async obtenerRegistrosDirecto(): Promise<Registro[]> {
+  async obtenerRegistrosDirecto(empresaId: string): Promise<Registro[]> {
     try {
+      const id = empresaId || 'default_empresa';
       const registrosRef = collection(this.firestore, 'registros');
-      const snap = await getDocs(registrosRef);
+      const q = query(registrosRef, where('empresaId', '==', id));
+      const snap = await getDocs(q);
       return snap.docs.map((d) => ({ ...(d.data() as Registro), id: d.id }));
     } catch (e) {
       console.error('Error leyendo registros directo:', e);
@@ -218,11 +191,14 @@ export class RegistroService {
     return deleteDoc(registroDoc);
   }
 
-  getUsuarios(): Observable<Usuario[]> {
+  // --- USUARIOS FILTRADOS ÚNICAMENTE PARA LA COMPAÑÍA ACTIVA ---
+  getUsuariosByEmpresa(empresaId: string): Observable<Usuario[]> {
     return new Observable<Usuario[]>((subscriber) => {
+      const id = empresaId || 'default_empresa';
       const usuariosRef = collection(this.firestore, 'usuarios');
+      const q = query(usuariosRef, where('empresaId', '==', id));
       const unsub = onSnapshot(
-        usuariosRef,
+        q,
         (snap) => {
           this.ngZone.run(() => {
             const lista = snap.docs.map((d) => ({ ...(d.data() as Usuario), id: d.id }));
@@ -237,10 +213,12 @@ export class RegistroService {
     });
   }
 
-  async obtenerUsuariosDirecto(): Promise<Usuario[]> {
+  async obtenerUsuariosDirecto(empresaId: string): Promise<Usuario[]> {
     try {
+      const id = empresaId || 'default_empresa';
       const usuariosRef = collection(this.firestore, 'usuarios');
-      const snap = await getDocs(usuariosRef);
+      const q = query(usuariosRef, where('empresaId', '==', id));
+      const snap = await getDocs(q);
       return snap.docs.map((d) => ({ ...(d.data() as Usuario), id: d.id }));
     } catch (e) {
       console.error('Error leyendo usuarios directo:', e);
