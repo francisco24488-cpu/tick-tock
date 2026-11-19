@@ -4,6 +4,35 @@ import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { RegistroService, Empresa, Usuario, Registro, ActividadItem } from './services/registro';
 
+export interface EmpresaExtendida extends Empresa {
+  maxComidasPorTurno?: number;
+  tiempoLimiteTareasMinutos?: number;
+  tiempoLimiteQRMinutos?: number;
+  habilitarLimiteEntrada?: boolean;
+  toleranciaEntradaMinutos?: number;
+  permitirMultiplesRegistrosDia?: boolean;
+  tipoMiembroOption?: string;
+  tipoMiembroSingular?: string;
+  tipoMiembroPlural?: string;
+}
+
+export interface ComidaItem {
+  inicio: string;
+  fin?: string;
+  segundos?: number;
+}
+
+export interface RegistroExtendido extends Registro {
+  comidasRealizadas?: number;
+  historialComidas?: ComidaItem[];
+  minutosComidaAsignados?: number;
+  comidaExpiradaSinRegresar?: boolean;
+  alertaComidaVistaPorAdmin?: boolean;
+  timestampTareaInicio?: number;
+  tareaExpiradaSinRegistrar?: boolean;
+  alertaTareaVistaPorAdmin?: boolean;
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -13,6 +42,11 @@ import { RegistroService, Empresa, Usuario, Registro, ActividadItem } from './se
   encapsulation: ViewEncapsulation.None
 })
 export class App implements OnInit, OnDestroy {
+  // Claves globales de EmailJS (cuenta soporte.ticktock@gmail.com)
+  private readonly EMAILJS_SERVICE_ID = 'service_008th9q';
+  private readonly EMAILJS_TEMPLATE_ID = 'template_ota0ucm';
+  private readonly EMAILJS_PUBLIC_KEY = 'Oyqn5xRif_jnlnDNw';
+
   pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' = 'bienvenida';
   tabAuth: 'login' | 'registro' = 'login';
 
@@ -20,7 +54,7 @@ export class App implements OnInit, OnDestroy {
   sesionIniciada: boolean = false;
   empresaActualId: string = '';
 
-  empresa: Empresa = {
+  empresa: EmpresaExtendida = {
     nombre: 'TickTock Asistencia',
     sucursal: '',
     ubicacion: '',
@@ -30,15 +64,51 @@ export class App implements OnInit, OnDestroy {
     horaFin: '',
     colorTema: '#f97316',
     duracionComidaMinutos: 45,
+    maxComidasPorTurno: 1,
+    tiempoLimiteTareasMinutos: 10,
+    tiempoLimiteQRMinutos: 15,
+    habilitarLimiteEntrada: false,
+    toleranciaEntradaMinutos: 20,
+    permitirMultiplesRegistrosDia: true,
     habilitarFormEstudiantes: true,
     habilitarReporteHoras: true,
     habilitarReporteInformes: true,
     habilitarReporteCompleto: true,
-    departamentosPersonalizados: [],
-    emailjsServiceId: '',
-    emailjsTemplateId: '',
-    emailjsPublicKey: ''
+    departamentosPersonalizados: []
   };
+
+  // Selector dinámico de cómo llamar a los registros (Alumnos, Empleados, Compañeros, etc.)
+  tipoMiembroOption: string = 'Empleados';
+  tipoMiembroSingularCustom: string = '';
+  tipoMiembroPluralCustom: string = '';
+
+  readonly opcionesTipoMiembro = [
+    { id: 'Empleados', singular: 'Empleado', plural: 'Empleados' },
+    { id: 'Alumnos', singular: 'Alumno', plural: 'Alumnos' },
+    { id: 'Estudiantes', singular: 'Estudiante', plural: 'Estudiantes' },
+    { id: 'Compañeros', singular: 'Compañero', plural: 'Compañeros' },
+    { id: 'Colaboradores', singular: 'Colaborador', plural: 'Colaboradores' },
+    { id: 'Practicantes', singular: 'Practicante', plural: 'Practicantes' },
+    { id: 'Personal', singular: 'Integrante', plural: 'Personal' }
+  ];
+
+  readonly minutosRapidos = ['00', '05', '10', '15', '20', '30', '45'];
+
+  // Variables del editor táctil de horario en Configuración
+  cfgInicioHora: string = '';
+  cfgInicioMin: string = '00';
+  cfgInicioAmPm: 'AM' | 'PM' = 'AM';
+  cfgFinHora: string = '';
+  cfgFinMin: string = '00';
+  cfgFinAmPm: 'AM' | 'PM' = 'PM';
+
+  // Variables del editor táctil de horario en Registro de Compañía
+  regInicioHora: string = '';
+  regInicioMin: string = '00';
+  regInicioAmPm: 'AM' | 'PM' = 'AM';
+  regFinHora: string = '';
+  regFinMin: string = '00';
+  regFinAmPm: 'AM' | 'PM' = 'PM';
 
   temasDisponibles = [
     { nombre: 'Naranja Vibrante', hex: '#f97316' },
@@ -46,31 +116,6 @@ export class App implements OnInit, OnDestroy {
     { nombre: 'Morado Índigo', hex: '#7c3aed' },
     { nombre: 'Rosa Coral', hex: '#e11d48' },
     { nombre: 'Verde Turquesa', hex: '#0d9488' }
-  ];
-
-  opcionesHorario: string[] = [
-    '5:00 de la mañana',
-    '6:00 de la mañana',
-    '7:00 de la mañana',
-    '7:30 de la mañana',
-    '8:00 de la mañana',
-    '8:30 de la mañana',
-    '9:00 de la mañana',
-    '9:30 de la mañana',
-    '10:00 de la mañana',
-    '11:00 de la mañana',
-    '12:00 del mediodía',
-    '1:00 de la tarde',
-    '2:00 de la tarde',
-    '3:00 de la tarde',
-    '4:00 de la tarde',
-    '5:00 de la tarde',
-    '6:00 de la tarde',
-    '7:00 de la tarde',
-    '8:00 de la noche',
-    '9:00 de la noche',
-    '10:00 de la noche',
-    '11:00 de la noche'
   ];
 
   departamentosBase = [
@@ -100,6 +145,9 @@ export class App implements OnInit, OnDestroy {
   formHoraInicio: string = '';
   formHoraFin: string = '';
   formTelefono: string = '';
+  formTipoMiembroOption: string = 'Empleados';
+  formTipoMiembroSingularCustom: string = '';
+  formTipoMiembroPluralCustom: string = '';
 
   // Control de visibilidad de contraseñas (ojito)
   verPassLogin: boolean = false;
@@ -107,7 +155,7 @@ export class App implements OnInit, OnDestroy {
   verPassNuevoAlumno: boolean = false;
   verPassEditarAlumno: boolean = false;
 
-  // Modal Nuevo Estudiante (Admin)
+  // Modal Nuevo Registro / Miembro (Admin)
   mostrarModalNuevoEstudiante: boolean = false;
   adminNuevoNombre: string = '';
   adminNuevoCorreo: string = '';
@@ -118,7 +166,7 @@ export class App implements OnInit, OnDestroy {
   adminNuevoTel: string = '';
   adminNuevoMatricula: string = '';
 
-  // Modal Editar Estudiante (Admin)
+  // Modal Editar Miembro (Admin)
   mostrarModalEditarEstudiante: boolean = false;
   editEstudianteId: string = '';
   editEstudianteNombre: string = '';
@@ -136,7 +184,6 @@ export class App implements OnInit, OnDestroy {
   enviandoCorreoGmail: boolean = false;
   correoEnviadoExito: boolean = false;
   errorEnvioGmail: string = '';
-  mostrarConfigEmailJSInline: boolean = false;
   mensajeExitoVerificacionLink: string = '';
 
   // QR & Cámara Real
@@ -146,6 +193,8 @@ export class App implements OnInit, OnDestroy {
   qrImagenUrl: string = '';
   timestampQRGenerado: number = 0;
   private procesandoExpiracionQR: boolean = false;
+  private procesandoExpiracionComida: boolean = false;
+  private procesandoExpiracionTarea: boolean = false;
 
   codigoEscaneadoManual: string = '';
   escaneandoCamara: boolean = false;
@@ -159,11 +208,13 @@ export class App implements OnInit, OnDestroy {
   tiempoRestanteQR: number = 0;
   tiempoRestanteActividad: number = 0;
   tiempoRestantePausa: number = 0;
+  tiempoRestanteToleranciaEntrada: number = 0;
+  estadoToleranciaEntrada: 'DESHABILITADO' | 'ANTES' | 'EN_TOLERANCIA' | 'EXPIRADO' = 'DESHABILITADO';
   private avisoComida2MinDado: boolean = false;
   private avisoComida1MinDado: boolean = false;
 
   usuariosSistema: Usuario[] = [];
-  registros: Registro[] = [];
+  registros: RegistroExtendido[] = [];
 
   observacionActual: string = '';
   cargandoAccion: boolean = false;
@@ -192,6 +243,191 @@ export class App implements OnInit, OnDestroy {
     private registroService: RegistroService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  // --- EDITOR TÁCTIL DE HORAS AM / PM ---
+  private descomponerHoraTexto(texto?: string): { hora: string; min: string; ampm: 'AM' | 'PM' } {
+    if (!texto || !texto.trim()) {
+      return { hora: '', min: '00', ampm: 'AM' };
+    }
+    const m = texto.trim().match(/(\d{1,2}):(\d{2})\s*(?:de la\s+|del\s+)?(am|pm|mañana|mediodía|mediodia|tarde|noche)?/i);
+    if (!m) return { hora: '', min: '00', ampm: 'AM' };
+
+    let h = parseInt(m[1], 10);
+    const min = m[2].padStart(2, '0');
+    const per = (m[3] || '').toLowerCase();
+    let ampm: 'AM' | 'PM' = 'AM';
+
+    if (per === 'pm' || per === 'tarde' || per === 'noche') {
+      ampm = 'PM';
+      if (h > 12) h -= 12;
+      if (h === 0) h = 12;
+    } else if (per === 'mediodía' || per === 'mediodia') {
+      ampm = 'PM';
+      h = 12;
+    } else if (per === 'am' || per === 'mañana') {
+      ampm = 'AM';
+      if (h === 0 || h > 12) h = 12;
+    } else {
+      if (h >= 12) {
+        ampm = 'PM';
+        if (h > 12) h -= 12;
+      } else if (h === 0) {
+        h = 12;
+      }
+    }
+
+    return {
+      hora: h.toString().padStart(2, '0'),
+      min,
+      ampm
+    };
+  }
+
+  private formatearHoraAmPm(hora: string, min: string, ampm: 'AM' | 'PM'): string {
+    const hDigits = (hora || '').replace(/\D/g, '');
+    if (!hDigits) return '';
+    let hNum = parseInt(hDigits, 10);
+    if (isNaN(hNum) || hNum < 1) hNum = 1;
+    if (hNum > 12) hNum = 12;
+
+    const mDigits = (min || '00').replace(/\D/g, '');
+    let mNum = parseInt(mDigits || '0', 10);
+    if (isNaN(mNum) || mNum < 0) mNum = 0;
+    if (mNum > 59) mNum = 59;
+
+    return `${hNum.toString().padStart(2, '0')}:${mNum.toString().padStart(2, '0')} ${ampm}`;
+  }
+
+  sincronizarHorarioConfig(): void {
+    this.empresa.horaInicio = this.formatearHoraAmPm(this.cfgInicioHora, this.cfgInicioMin, this.cfgInicioAmPm);
+    this.empresa.horaFin = this.formatearHoraAmPm(this.cfgFinHora, this.cfgFinMin, this.cfgFinAmPm);
+  }
+
+  seleccionarMinutoConfig(cual: 'inicio' | 'fin', min: string): void {
+    if (cual === 'inicio') {
+      if (!this.cfgInicioHora) this.cfgInicioHora = '08';
+      this.cfgInicioMin = min;
+    } else {
+      if (!this.cfgFinHora) this.cfgFinHora = '05';
+      this.cfgFinMin = min;
+    }
+    this.sincronizarHorarioConfig();
+  }
+
+  cambiarAmPmConfig(cual: 'inicio' | 'fin', ampm: 'AM' | 'PM'): void {
+    if (cual === 'inicio') {
+      this.cfgInicioAmPm = ampm;
+    } else {
+      this.cfgFinAmPm = ampm;
+    }
+    this.sincronizarHorarioConfig();
+  }
+
+  limpiarHoraConfig(cual: 'inicio' | 'fin'): void {
+    if (cual === 'inicio') {
+      this.cfgInicioHora = '';
+      this.cfgInicioMin = '00';
+      this.empresa.horaInicio = '';
+    } else {
+      this.cfgFinHora = '';
+      this.cfgFinMin = '00';
+      this.empresa.horaFin = '';
+    }
+  }
+
+  sincronizarHorarioRegistro(): void {
+    this.formHoraInicio = this.formatearHoraAmPm(this.regInicioHora, this.regInicioMin, this.regInicioAmPm);
+    this.formHoraFin = this.formatearHoraAmPm(this.regFinHora, this.regFinMin, this.regFinAmPm);
+  }
+
+  seleccionarMinutoRegistro(cual: 'inicio' | 'fin', min: string): void {
+    if (cual === 'inicio') {
+      if (!this.regInicioHora) this.regInicioHora = '08';
+      this.regInicioMin = min;
+    } else {
+      if (!this.regFinHora) this.regFinHora = '05';
+      this.regFinMin = min;
+    }
+    this.sincronizarHorarioRegistro();
+  }
+
+  cambiarAmPmRegistro(cual: 'inicio' | 'fin', ampm: 'AM' | 'PM'): void {
+    if (cual === 'inicio') {
+      this.regInicioAmPm = ampm;
+    } else {
+      this.regFinAmPm = ampm;
+    }
+    this.sincronizarHorarioRegistro();
+  }
+
+  // --- ETIQUETAS DINÁMICAS (ALUMNO / EMPLEADO / COMPAÑERO / PERSONALIZADO) ---
+  get etiquetaSingular(): string {
+    if (this.tipoMiembroOption === '__OTRO__') {
+      return this.tipoMiembroSingularCustom.trim() || 'Integrante';
+    }
+    const found = this.opcionesTipoMiembro.find(o => o.id === this.tipoMiembroOption);
+    return found ? found.singular : 'Empleado';
+  }
+
+  get etiquetaPlural(): string {
+    if (this.tipoMiembroOption === '__OTRO__') {
+      return this.tipoMiembroPluralCustom.trim() || 'Integrantes';
+    }
+    const found = this.opcionesTipoMiembro.find(o => o.id === this.tipoMiembroOption);
+    return found ? found.plural : 'Empleados';
+  }
+
+  async cambiarTipoMiembroRapido(nuevaOpcion: string): Promise<void> {
+    this.tipoMiembroOption = nuevaOpcion;
+    if (nuevaOpcion !== '__OTRO__') {
+      await this.guardarTipoMiembroEnNube(true);
+    }
+    this.cdr.detectChanges();
+  }
+
+  async guardarTipoMiembroEnNube(mostrarAviso: boolean = true): Promise<void> {
+    if (!this.empresaActualId) return;
+    this.empresa.tipoMiembroOption = this.tipoMiembroOption;
+    this.empresa.tipoMiembroSingular = this.etiquetaSingular;
+    this.empresa.tipoMiembroPlural = this.etiquetaPlural;
+
+    try {
+      await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
+      if (mostrarAviso) {
+        this.notificar(`🏷️ Tipo de registro actualizado a "${this.etiquetaPlural}"`, 'exito');
+      }
+    } catch (e) {
+      console.error('Error guardando tipo de miembro:', e);
+    }
+  }
+
+  // Botón rápido para activar/desactivar el cronómetro de tolerancia de hora de entrada
+  async toggleRapidoLimiteEntrada(): Promise<void> {
+    if (!this.empresaActualId) return;
+    const nuevoValor = !this.empresa.habilitarLimiteEntrada;
+
+    if (nuevoValor && !this.empresa.horaInicio) {
+      this.notificar('⚠️ Primero configura una Hora de Inicio en ⚙️ Configuración', 'alerta');
+      this.abrirModalEmpresa();
+      return;
+    }
+
+    this.empresa.habilitarLimiteEntrada = nuevoValor;
+    this.recalcularCronometros();
+    this.cdr.detectChanges();
+
+    try {
+      await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
+      this.notificar(
+        nuevoValor
+          ? `⏱️ Límite de entrada ACTIVADO (${this.empresa.horaInicio} + ${this.empresa.toleranciaEntradaMinutos || 20} min)`
+          : '🔓 Límite de hora de entrada DESACTIVADO (pueden marcar a cualquier hora)',
+        nuevoValor ? 'exito' : 'info'
+      );
+    } catch (e) {
+      console.error('Error cambiando límite de entrada:', e);
+    }
+  }
 
   get listaDepartamentosCompleta(): string[] {
     const personalizados = this.empresa.departamentosPersonalizados || [];
@@ -260,6 +496,27 @@ export class App implements OnInit, OnDestroy {
       next: (data: Usuario[]) => {
         this.usuariosSistema = data || [];
 
+        // Expulsión automática en tiempo real si el administrador eliminó este usuario
+        if (
+          this.sesionIniciada &&
+          this.usuarioActual &&
+          this.usuarioActual.rol !== 'admin' &&
+          data &&
+          data.length > 0
+        ) {
+          const emailActual = (this.usuarioActual.correo || '').toLowerCase();
+          const idActual = this.usuarioActual.id;
+          const sigueExistiendo = data.some(u =>
+            (idActual && u.id === idActual) ||
+            ((u.correo || '').toLowerCase() === emailActual)
+          );
+
+          if (!sigueExistiendo) {
+            this.cerrarSesion('⛔ Tu cuenta fue eliminada por el administrador. Inicia sesión nuevamente.');
+            return;
+          }
+        }
+
         if (this.mostrarModalVerificacionGmail && this.usuarioPendienteVerificacion) {
           const actualizado = this.usuariosSistema.find(
             u => u.correo.toLowerCase() === this.usuarioPendienteVerificacion!.correo.toLowerCase()
@@ -283,7 +540,7 @@ export class App implements OnInit, OnDestroy {
     this.subsEmpresa.push(subCfg, subReg, subUsr);
   }
 
-  // --- PROCESAR ENLACE DE VERIFICACIÓN EN 2 PASOS DESDE GMAIL ---
+  // --- PROCESAR ENLACE DE VERIFICACIÓN EN 2 PASOS DESDE GMAIL ("Sí, soy yo") ---
   private async procesarEnlaceVerificacionGmail(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('verificar');
@@ -326,14 +583,41 @@ export class App implements OnInit, OnDestroy {
     root.style.setProperty('--primary-border', `${color}48`);
   }
 
-  private aplicarConfiguracionRecibida(cfg: Partial<Empresa>): void {
+  private aplicarConfiguracionRecibida(cfg: any): void {
     this.empresa = {
       ...this.empresa,
       ...cfg,
       colorTema: cfg.colorTema || '#f97316',
+      duracionComidaMinutos: cfg.duracionComidaMinutos !== undefined ? Number(cfg.duracionComidaMinutos) : 45,
+      maxComidasPorTurno: cfg.maxComidasPorTurno !== undefined ? Number(cfg.maxComidasPorTurno) : 1,
+      tiempoLimiteTareasMinutos: cfg.tiempoLimiteTareasMinutos !== undefined ? Number(cfg.tiempoLimiteTareasMinutos) : 10,
+      tiempoLimiteQRMinutos: cfg.tiempoLimiteQRMinutos !== undefined ? Number(cfg.tiempoLimiteQRMinutos) : 15,
+      habilitarLimiteEntrada: cfg.habilitarLimiteEntrada !== undefined ? Boolean(cfg.habilitarLimiteEntrada) : false,
+      toleranciaEntradaMinutos: cfg.toleranciaEntradaMinutos !== undefined ? Number(cfg.toleranciaEntradaMinutos) : 20,
+      permitirMultiplesRegistrosDia: cfg.permitirMultiplesRegistrosDia !== undefined ? Boolean(cfg.permitirMultiplesRegistrosDia) : true,
       departamentosPersonalizados: cfg.departamentosPersonalizados || []
     };
+
+    const ini = this.descomponerHoraTexto(this.empresa.horaInicio);
+    this.cfgInicioHora = ini.hora;
+    this.cfgInicioMin = ini.min;
+    this.cfgInicioAmPm = ini.ampm;
+
+    const fin = this.descomponerHoraTexto(this.empresa.horaFin);
+    this.cfgFinHora = fin.hora;
+    this.cfgFinMin = fin.min;
+    this.cfgFinAmPm = fin.ampm;
+
+    if (cfg.tipoMiembroOption) {
+      this.tipoMiembroOption = cfg.tipoMiembroOption;
+      if (cfg.tipoMiembroOption === '__OTRO__') {
+        this.tipoMiembroSingularCustom = cfg.tipoMiembroSingular || '';
+        this.tipoMiembroPluralCustom = cfg.tipoMiembroPlural || '';
+      }
+    }
+
     this.aplicarVariablesGlobalesCSS(this.empresa.colorTema!);
+    this.recalcularCronometros();
     this.cdr.detectChanges();
   }
 
@@ -402,7 +686,7 @@ export class App implements OnInit, OnDestroy {
       this.recalcularCronometros();
       this.cdr.detectChanges();
       if (mostrarAviso) {
-        this.notificar(`🔄 Datos sincronizados (${this.totalEstudiantes} alumnos)`, 'info');
+        this.notificar(`🔄 Datos sincronizados (${this.totalEstudiantes} ${this.etiquetaPlural.toLowerCase()})`, 'info');
       }
     } catch (e) {
       console.error('Error sincronizando datos:', e);
@@ -450,37 +734,56 @@ export class App implements OnInit, OnDestroy {
     this.masterTimerId = setInterval(tick, 1000);
   }
 
-  // --- CRONÓMETROS EN VIVO Y EXPIRACIÓN ESTRICTA DE 15 MINUTOS ---
+  // Convierte textos como "05:05 AM", "02:15 PM" o "2:00 de la tarde" a objeto Date de hoy
+  private parsearHoraInicioHoy(horaStr?: string): Date | null {
+    if (!horaStr) return null;
+    const match = horaStr.trim().match(/(\d{1,2}):(\d{2})\s*(?:de la\s+|del\s+)?(mañana|mediodía|mediodia|tarde|noche|am|pm)?/i);
+    if (!match) return null;
+
+    let horas = parseInt(match[1], 10);
+    const minutos = parseInt(match[2], 10);
+    const periodo = (match[3] || '').toLowerCase();
+
+    if (periodo === 'tarde' || periodo === 'noche' || periodo === 'pm') {
+      if (horas < 12) horas += 12;
+    } else if (periodo === 'mañana' || periodo === 'am') {
+      if (horas === 12) horas = 0;
+    } else if (periodo === 'mediodía' || periodo === 'mediodia') {
+      horas = 12;
+    }
+
+    const ahora = new Date();
+    return new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate(), horas, minutos, 0, 0);
+  }
+
+  // --- CRONÓMETROS EN VIVO (QR, TAREAS, COMIDA Y TOLERANCIA DE ENTRADA) ---
   private recalcularCronometros(): void {
     const ahoraMs = Date.now();
     const reg = this.registroActivo;
 
+    // 1. Cronómetro dinámico de QR (al llegar a 0 bota/cancela turno)
+    const limiteQRSegs = Math.max(1, Number(this.empresa.tiempoLimiteQRMinutos) || 15) * 60;
     const refQrTs = this.mostrarModalQR && this.timestampQRGenerado
       ? this.timestampQRGenerado
       : (reg?.timestampQR || reg?.timestampEntrada || 0);
 
     if (reg && !reg.verificadoCamaraMovil && refQrTs > 0) {
-      const restQR = 900 - Math.floor((ahoraMs - refQrTs) / 1000);
+      const restQR = limiteQRSegs - Math.floor((ahoraMs - refQrTs) / 1000);
       this.tiempoRestanteQR = restQR > 0 ? restQR : 0;
 
-      // Si pasaron los 15 minutos y NO escaneó el QR: anular entrada, sacar del turno y alertar al encargado
       if (restQR <= 0 && !this.procesandoExpiracionQR) {
         this.procesandoExpiracionQR = true;
         this.ejecutarExpiracionTurnoPorQR(reg);
+        return;
       }
     } else {
       this.tiempoRestanteQR = 0;
     }
 
-    if (reg && !this.esActividadRegistrada(reg) && reg.timestampEntrada) {
-      const restAct = 600 - Math.floor((ahoraMs - reg.timestampEntrada) / 1000);
-      this.tiempoRestanteActividad = restAct > 0 ? restAct : 0;
-    } else {
-      this.tiempoRestanteActividad = 0;
-    }
-
+    // 2. Cronómetro dinámico de COMIDA (al llegar a 0 bota/cierra turno y avisa al Admin)
     if (reg && reg.estado === 'En Pausa' && reg.timestampPausaInicio) {
-      const totalSegsComida = (Number(this.empresa.duracionComidaMinutos) || 45) * 60;
+      const minsComida = reg.minutosComidaAsignados || Math.max(1, Number(this.empresa.duracionComidaMinutos) || 45);
+      const totalSegsComida = minsComida * 60;
       const restPausa = totalSegsComida - Math.floor((ahoraMs - reg.timestampPausaInicio) / 1000);
       this.tiempoRestantePausa = restPausa > 0 ? restPausa : 0;
 
@@ -491,17 +794,68 @@ export class App implements OnInit, OnDestroy {
         this.avisoComida1MinDado = true;
         this.notificar('⚠️ ¡Falta 1 MINUTO! Prepárate para presionar Terminar Comida.', 'alerta');
       }
+
+      if (restPausa <= 0 && !this.procesandoExpiracionComida) {
+        this.procesandoExpiracionComida = true;
+        this.ejecutarExpiracionTurnoPorComida(reg);
+        return;
+      }
     } else {
       this.tiempoRestantePausa = 0;
       this.avisoComida2MinDado = false;
       this.avisoComida1MinDado = false;
     }
+
+    // 3. Cronómetro dinámico de ACTIVIDADES / TAREAS (al llegar a 0 bota/cierra turno y avisa al Admin)
+    const limiteTareasSegs = Math.max(1, Number(this.empresa.tiempoLimiteTareasMinutos) || 10) * 60;
+    const refTareaTs = reg ? (reg.timestampTareaInicio || reg.timestampEntrada || 0) : 0;
+
+    if (reg && !this.esActividadRegistrada(reg) && refTareaTs > 0) {
+      const restAct = limiteTareasSegs - Math.floor((ahoraMs - refTareaTs) / 1000);
+      this.tiempoRestanteActividad = restAct > 0 ? restAct : 0;
+
+      if (restAct <= 0 && !this.procesandoExpiracionTarea) {
+        this.procesandoExpiracionTarea = true;
+        this.ejecutarExpiracionTurnoPorTarea(reg);
+        return;
+      }
+    } else {
+      this.tiempoRestanteActividad = 0;
+    }
+
+    // 4. Cronómetro de tolerancia para marcar entrada según horario
+    if (this.empresa.habilitarLimiteEntrada && this.empresa.horaInicio) {
+      const horaInicioDate = this.parsearHoraInicioHoy(this.empresa.horaInicio);
+      if (horaInicioDate) {
+        const inicioMs = horaInicioDate.getTime();
+        const toleranciaMs = Math.max(1, Number(this.empresa.toleranciaEntradaMinutos) || 20) * 60 * 1000;
+        const limiteMs = inicioMs + toleranciaMs;
+
+        if (ahoraMs < inicioMs) {
+          this.estadoToleranciaEntrada = 'ANTES';
+          this.tiempoRestanteToleranciaEntrada = 0;
+        } else if (ahoraMs <= limiteMs) {
+          this.estadoToleranciaEntrada = 'EN_TOLERANCIA';
+          this.tiempoRestanteToleranciaEntrada = Math.max(0, Math.floor((limiteMs - ahoraMs) / 1000));
+        } else {
+          this.estadoToleranciaEntrada = 'EXPIRADO';
+          this.tiempoRestanteToleranciaEntrada = 0;
+        }
+      } else {
+        this.estadoToleranciaEntrada = 'DESHABILITADO';
+        this.tiempoRestanteToleranciaEntrada = 0;
+      }
+    } else {
+      this.estadoToleranciaEntrada = 'DESHABILITADO';
+      this.tiempoRestanteToleranciaEntrada = 0;
+    }
   }
 
-  private async ejecutarExpiracionTurnoPorQR(reg: Registro): Promise<void> {
+  private async ejecutarExpiracionTurnoPorQR(reg: RegistroExtendido): Promise<void> {
     try {
+      const minsQR = Number(this.empresa.tiempoLimiteQRMinutos) || 15;
       const horaLimiteStr = new Date().toLocaleTimeString('es-ES');
-      const motivoExpiracion = '⛔ Entrada cancelada: No escaneó el QR dentro de los 15 minutos reglamentarios';
+      const motivoExpiracion = `⛔ Entrada cancelada: No escaneó el QR dentro de los ${minsQR} minutos reglamentarios`;
 
       reg.estado = 'Expirado';
       reg.qrExpiradoSinEscanear = true;
@@ -526,7 +880,7 @@ export class App implements OnInit, OnDestroy {
       }
 
       this.notificar(
-        '⛔ ¡Tiempo agotado (15 min)! No escaneaste el QR a tiempo. Tu entrada fue cancelada y se notificó al encargado.',
+        `⛔ ¡Tiempo agotado (${minsQR} min)! No escaneaste el QR a tiempo. Tu entrada fue cancelada y se notificó al encargado.`,
         'alerta'
       );
       this.cdr.detectChanges();
@@ -537,17 +891,104 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
+  // --- EXPIRACIÓN AUTOMÁTICA AL ACABARSE EL TIEMPO DE COMIDA ---
+  private async ejecutarExpiracionTurnoPorComida(reg: RegistroExtendido): Promise<void> {
+    try {
+      const minsComida = reg.minutosComidaAsignados || Number(this.empresa.duracionComidaMinutos) || 45;
+      const horaLimiteStr = new Date().toLocaleTimeString('es-ES');
+      const notaCierre = `⛔ Turno cerrado: Excedió los ${minsComida} min de comida sin regresar`;
+      const obsAnterior = (reg.observacion && !reg.observacion.toLowerCase().includes('pendiente'))
+        ? `${reg.observacion} | ${notaCierre}`
+        : notaCierre;
+
+      reg.estado = 'Expirado';
+      reg.comidaExpiradaSinRegresar = true;
+      reg.alertaComidaVistaPorAdmin = false;
+      reg.horaPausaFin = `${horaLimiteStr} (Expirado)`;
+      reg.horaSalida = horaLimiteStr;
+      reg.totalHoras = 'Cerrado (Tiempo de comida agotado)';
+      reg.observacion = obsAnterior;
+
+      this.mostrarModalQR = false;
+      this.detenerCamara();
+
+      const idReal = await this.obtenerIdRealRegistro(reg);
+      if (idReal) {
+        await this.registroService.actualizarRegistro(idReal, {
+          estado: 'Expirado',
+          comidaExpiradaSinRegresar: true,
+          alertaComidaVistaPorAdmin: false,
+          horaPausaFin: `${horaLimiteStr} (Expirado)`,
+          horaSalida: horaLimiteStr,
+          totalHoras: 'Cerrado (Tiempo de comida agotado)',
+          observacion: obsAnterior
+        } as any);
+      }
+
+      this.notificar(
+        `⛔ ¡Tiempo de comida agotado (${minsComida} min)! Tu turno fue cerrado automáticamente y se envió aviso al encargado.`,
+        'alerta'
+      );
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('Error al expirar turno por comida:', e);
+    } finally {
+      this.procesandoExpiracionComida = false;
+    }
+  }
+
+  // --- EXPIRACIÓN AUTOMÁTICA AL ACABARSE EL TIEMPO DE ACTIVIDADES ---
+  private async ejecutarExpiracionTurnoPorTarea(reg: RegistroExtendido): Promise<void> {
+    try {
+      const minsTarea = Number(this.empresa.tiempoLimiteTareasMinutos) || 10;
+      const horaLimiteStr = new Date().toLocaleTimeString('es-ES');
+      const motivoExpiracion = `⛔ Turno cerrado: No registró ninguna actividad dentro de los ${minsTarea} minutos reglamentarios`;
+
+      reg.estado = 'Expirado';
+      reg.tareaExpiradaSinRegistrar = true;
+      reg.alertaTareaVistaPorAdmin = false;
+      reg.horaSalida = horaLimiteStr;
+      reg.totalHoras = 'Cerrado (Sin actividad registrada)';
+      reg.observacion = motivoExpiracion;
+
+      this.mostrarModalQR = false;
+      this.detenerCamara();
+
+      const idReal = await this.obtenerIdRealRegistro(reg);
+      if (idReal) {
+        await this.registroService.actualizarRegistro(idReal, {
+          estado: 'Expirado',
+          tareaExpiradaSinRegistrar: true,
+          alertaTareaVistaPorAdmin: false,
+          horaSalida: horaLimiteStr,
+          totalHoras: 'Cerrado (Sin actividad registrada)',
+          observacion: motivoExpiracion
+        } as any);
+      }
+
+      this.notificar(
+        `⛔ ¡Tiempo agotado (${minsTarea} min)! No anotaste ninguna actividad. Tu turno fue cerrado y se notificó al encargado.`,
+        'alerta'
+      );
+      this.cdr.detectChanges();
+    } catch (e) {
+      console.error('Error al expirar turno por actividad:', e);
+    } finally {
+      this.procesandoExpiracionTarea = false;
+    }
+  }
+
   formatearSegundos(segundos: number): string {
     const mins = Math.floor(segundos / 60).toString().padStart(2, '0');
     const segs = (segundos % 60).toString().padStart(2, '0');
     return `${mins}:${segs}`;
   }
 
-  esActividadRegistrada(reg?: Registro): boolean {
+  esActividadRegistrada(reg?: RegistroExtendido): boolean {
     if (!reg) return false;
     if (reg.actividades && reg.actividades.length > 0) return true;
     if (reg.actividadRegistrada) return true;
-    return !!reg.observacion && !reg.observacion.toLowerCase().includes('pendiente');
+    return !!reg.observacion && !reg.observacion.toLowerCase().includes('pendiente') && !reg.observacion.startsWith('⛔');
   }
 
   get actividadesTurnoActivo(): ActividadItem[] {
@@ -573,26 +1014,18 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  // --- ENVÍO REAL DE CÓDIGO DE VERIFICACIÓN DE 2 PASOS POR GMAIL (SIN VENTANA DE REDACCIÓN) ---
+  // --- ENVÍO REAL DE CÓDIGO DE VERIFICACIÓN DE 2 PASOS POR GMAIL ---
   private async enviarCorreoCodigoGmailReal(usuario: Usuario): Promise<void> {
     this.usuarioPendienteVerificacion = usuario;
     this.codigoVerificacionIngresado = '';
     this.correoEnviadoExito = false;
     this.errorEnvioGmail = '';
-    this.mostrarConfigEmailJSInline = false;
     this.mostrarModalVerificacionGmail = true;
     this.cdr.detectChanges();
 
-    const serviceId = (this.empresa.emailjsServiceId || '').trim();
-    const templateId = (this.empresa.emailjsTemplateId || '').trim();
-    const publicKey = (this.empresa.emailjsPublicKey || '').trim();
-
-    if (!serviceId || !templateId || !publicKey) {
-      this.errorEnvioGmail = '⚠️ Falta conectar el servicio de envío automático de correo (EmailJS) en esta compañía.';
-      this.mostrarConfigEmailJSInline = true;
-      this.cdr.detectChanges();
-      return;
-    }
+    const serviceId = this.EMAILJS_SERVICE_ID.trim();
+    const templateId = this.EMAILJS_TEMPLATE_ID.trim();
+    const publicKey = this.EMAILJS_PUBLIC_KEY.trim();
 
     this.enviandoCorreoGmail = true;
     this.cdr.detectChanges();
@@ -613,6 +1046,7 @@ export class App implements OnInit, OnDestroy {
             to_name: usuario.nombre,
             app_name: usuario.empresaNombre || this.empresa.nombre || 'TickTock',
             codigo: usuario.codigoVerificacion,
+            passcode: usuario.codigoVerificacion,
             verification_code: usuario.codigoVerificacion,
             verification_link: enlace,
             message: `Hola ${usuario.nombre}, tu código de verificación en 2 pasos para ${usuario.empresaNombre || this.empresa.nombre} es: ${usuario.codigoVerificacion}. Si fuiste tú, ingresa este código o haz clic en "Sí, soy yo": ${enlace}`
@@ -625,7 +1059,7 @@ export class App implements OnInit, OnDestroy {
         this.notificar(`📩 Código de verificación enviado al correo ${usuario.correo}`, 'exito');
       } else {
         const txt = await resp.text();
-        this.errorEnvioGmail = `❌ No se pudo enviar el correo (${txt || 'Revisa tus claves de EmailJS'}).`;
+        this.errorEnvioGmail = `❌ No se pudo enviar el correo (${txt || 'Verifica la plantilla de correo'}).`;
       }
     } catch (e) {
       console.error('Error enviando correo de verificación:', e);
@@ -633,22 +1067,6 @@ export class App implements OnInit, OnDestroy {
     } finally {
       this.enviandoCorreoGmail = false;
       this.cdr.detectChanges();
-    }
-  }
-
-  async guardarConfigEmailJSYReenviar(): Promise<void> {
-    if (!this.empresa.emailjsServiceId?.trim() || !this.empresa.emailjsTemplateId?.trim() || !this.empresa.emailjsPublicKey?.trim()) {
-      this.notificar('Completa Service ID, Template ID y Public Key', 'alerta');
-      return;
-    }
-
-    const empId = this.usuarioPendienteVerificacion?.empresaId || this.empresaActualId;
-    if (empId) {
-      await this.registroService.guardarEmpresaConfig(empId, this.empresa);
-    }
-
-    if (this.usuarioPendienteVerificacion) {
-      await this.enviarCorreoCodigoGmailReal(this.usuarioPendienteVerificacion);
     }
   }
 
@@ -706,7 +1124,7 @@ export class App implements OnInit, OnDestroy {
     this.enviarCorreoCodigoGmailReal(alumno);
   }
 
-  // --- GESTIÓN DE ALUMNOS (ADMIN: ALTA Y EDICIÓN COMPLETA EN SU PROPIA COMPAÑÍA) ---
+  // --- GESTIÓN DE MIEMBROS (ADMIN) ---
   abrirModalNuevoEstudiante(): void {
     this.adminNuevoNombre = '';
     this.adminNuevoCorreo = '';
@@ -758,7 +1176,7 @@ export class App implements OnInit, OnDestroy {
       const token = 'VRF-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
       const codigo6 = Math.floor(100000 + Math.random() * 900000).toString();
 
-      const nuevoEstudiante: Usuario = {
+      const nuevoMiembro: Usuario = {
         empresaId: this.empresaActualId,
         nombre: this.adminNuevoNombre.trim(),
         correo: correoNorm,
@@ -766,7 +1184,7 @@ export class App implements OnInit, OnDestroy {
         rol: 'estudiante',
         departamento: deptoFinal,
         avatar: this.adminNuevoAvatar,
-        puesto: 'Estudiante / Colaborador',
+        puesto: this.etiquetaSingular,
         empresaNombre: this.empresa.nombre,
         sucursal: this.empresa.sucursal,
         horario: this.empresa.horario,
@@ -777,16 +1195,16 @@ export class App implements OnInit, OnDestroy {
         codigoVerificacion: codigo6
       };
 
-      const docRef = await this.registroService.registrarUsuario(nuevoEstudiante);
-      nuevoEstudiante.id = docRef.id;
-      this.usuariosSistema = [...this.usuariosSistema, nuevoEstudiante];
+      const docRef = await this.registroService.registrarUsuario(nuevoMiembro);
+      nuevoMiembro.id = docRef.id;
+      this.usuariosSistema = [...this.usuariosSistema, nuevoMiembro];
 
       this.mostrarModalNuevoEstudiante = false;
-      this.notificar(`📩 Alumno creado. Enviando código de verificación a ${correoNorm}...`, 'info');
-      await this.enviarCorreoCodigoGmailReal(nuevoEstudiante);
+      this.notificar(`📩 ${this.etiquetaSingular} registrado. Enviando código a ${correoNorm}...`, 'info');
+      await this.enviarCorreoCodigoGmailReal(nuevoMiembro);
     } catch (error) {
       console.error(error);
-      this.notificar('Error al guardar alumno en Firebase', 'alerta');
+      this.notificar(`Error al guardar ${this.etiquetaSingular.toLowerCase()} en Firebase`, 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
@@ -860,17 +1278,17 @@ export class App implements OnInit, OnDestroy {
       );
 
       this.mostrarModalEditarEstudiante = false;
-      this.notificar('✅ Datos del estudiante actualizados correctamente', 'exito');
+      this.notificar(`✅ Datos del ${this.etiquetaSingular.toLowerCase()} actualizados correctamente`, 'exito');
     } catch (e) {
-      console.error('Error editando estudiante:', e);
-      this.notificar('Error al actualizar datos del estudiante', 'alerta');
+      console.error('Error editando miembro:', e);
+      this.notificar('Error al actualizar datos', 'alerta');
     } finally {
       this.cargandoAccion = false;
       this.cdr.detectChanges();
     }
   }
 
-  // --- REGISTRO EXCLUSIVO PARA COMPAÑÍAS (CREA SU PROPIA BASE DE DATOS AISLADA) ---
+  // --- REGISTRO EXCLUSIVO PARA COMPAÑÍAS ---
   async ejecutarRegistro(): Promise<void> {
     if (!this.formEmpresaNombre.trim()) {
       this.notificar('Ingresa el nombre de tu Compañía o Institución', 'alerta');
@@ -890,6 +1308,8 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
+    this.sincronizarHorarioRegistro();
+
     this.cargandoAccion = true;
     this.cdr.detectChanges();
     const correoNorm = this.formCorreo.trim().toLowerCase();
@@ -898,6 +1318,12 @@ export class App implements OnInit, OnDestroy {
       ? `De ${this.formHoraInicio} a ${this.formHoraFin}`
       : (this.formHoraInicio ? `Desde ${this.formHoraInicio}` : 'Por definir');
 
+    this.tipoMiembroOption = this.formTipoMiembroOption;
+    if (this.formTipoMiembroOption === '__OTRO__') {
+      this.tipoMiembroSingularCustom = this.formTipoMiembroSingularCustom.trim() || 'Integrante';
+      this.tipoMiembroPluralCustom = this.formTipoMiembroPluralCustom.trim() || 'Integrantes';
+    }
+
     try {
       const existe = await this.registroService.buscarUsuarioPorCorreo(correoNorm);
       if (existe) {
@@ -905,13 +1331,12 @@ export class App implements OnInit, OnDestroy {
         return;
       }
 
-      // Crear ID único e independiente para esta nueva compañía
       const nuevaEmpresaId = 'emp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
       const departamentosInit = this.departamentosBase.some(d => d.toLowerCase() === deptoFinal.toLowerCase())
         ? []
         : [deptoFinal];
 
-      const nuevaEmpresa: Empresa = {
+      const nuevaEmpresa: EmpresaExtendida = {
         id: nuevaEmpresaId,
         nombre: this.formEmpresaNombre.trim(),
         sucursal: this.formSucursal.trim(),
@@ -922,14 +1347,20 @@ export class App implements OnInit, OnDestroy {
         horaFin: this.formHoraFin,
         colorTema: '#f97316',
         duracionComidaMinutos: 45,
+        maxComidasPorTurno: 1,
+        tiempoLimiteTareasMinutos: 10,
+        tiempoLimiteQRMinutos: 15,
+        habilitarLimiteEntrada: false,
+        toleranciaEntradaMinutos: 20,
+        permitirMultiplesRegistrosDia: true,
         habilitarFormEstudiantes: true,
         habilitarReporteHoras: true,
         habilitarReporteInformes: true,
         habilitarReporteCompleto: true,
         departamentosPersonalizados: departamentosInit,
-        emailjsServiceId: '',
-        emailjsTemplateId: '',
-        emailjsPublicKey: ''
+        tipoMiembroOption: this.tipoMiembroOption,
+        tipoMiembroSingular: this.etiquetaSingular,
+        tipoMiembroPlural: this.etiquetaPlural
       };
 
       await this.registroService.guardarEmpresaConfig(nuevaEmpresaId, nuevaEmpresa);
@@ -1029,8 +1460,11 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  cerrarSesion(): void {
+  cerrarSesion(mensajePersonalizado?: string): void {
     this.limpiarSuscripcionesEmpresa();
+    this.detenerCamara();
+    this.mostrarModalQR = false;
+    this.mostrarModalSalida = false;
     this.usuarioActual = null;
     this.empresaActualId = '';
     this.sesionIniciada = false;
@@ -1040,7 +1474,10 @@ export class App implements OnInit, OnDestroy {
     this.pantallaActual = 'bienvenida';
     sessionStorage.removeItem('ticktock_user_tab');
     localStorage.removeItem('ticktock_user');
-    this.notificar('Sesión cerrada en esta pestaña', 'info');
+    this.notificar(
+      mensajePersonalizado || 'Sesión cerrada en esta pestaña',
+      mensajePersonalizado ? 'alerta' : 'info'
+    );
     this.cdr.detectChanges();
   }
 
@@ -1073,6 +1510,12 @@ export class App implements OnInit, OnDestroy {
     this.formUbicacion = '';
     this.formHoraInicio = '';
     this.formHoraFin = '';
+    this.regInicioHora = '';
+    this.regInicioMin = '00';
+    this.regInicioAmPm = 'AM';
+    this.regFinHora = '';
+    this.regFinMin = '00';
+    this.regFinAmPm = 'PM';
     this.formTelefono = '';
     this.formDepartamento = 'Administración';
     this.formDepartamentoPersonalizado = '';
@@ -1082,6 +1525,16 @@ export class App implements OnInit, OnDestroy {
 
   // --- CONFIGURACIÓN DE EMPRESA ---
   abrirModalEmpresa(): void {
+    const ini = this.descomponerHoraTexto(this.empresa.horaInicio);
+    this.cfgInicioHora = ini.hora;
+    this.cfgInicioMin = ini.min;
+    this.cfgInicioAmPm = ini.ampm;
+
+    const fin = this.descomponerHoraTexto(this.empresa.horaFin);
+    this.cfgFinHora = fin.hora;
+    this.cfgFinMin = fin.min;
+    this.cfgFinAmPm = fin.ampm;
+
     this.mostrarModalEmpresa = true;
     this.cdr.detectChanges();
   }
@@ -1096,17 +1549,32 @@ export class App implements OnInit, OnDestroy {
     this.cargandoAccion = true;
     this.cdr.detectChanges();
 
+    this.sincronizarHorarioConfig();
+
     if (this.empresa.horaInicio && this.empresa.horaFin) {
       this.empresa.horario = `De ${this.empresa.horaInicio} a ${this.empresa.horaFin}`;
     } else if (this.empresa.horaInicio) {
       this.empresa.horario = `Desde ${this.empresa.horaInicio}`;
+    } else {
+      this.empresa.horario = '';
     }
 
+    this.empresa.duracionComidaMinutos = Math.max(1, Number(this.empresa.duracionComidaMinutos) || 45);
+    this.empresa.maxComidasPorTurno = Math.max(0, Number(this.empresa.maxComidasPorTurno ?? 1));
+    this.empresa.tiempoLimiteTareasMinutos = Math.max(1, Number(this.empresa.tiempoLimiteTareasMinutos) || 10);
+    this.empresa.tiempoLimiteQRMinutos = Math.max(1, Number(this.empresa.tiempoLimiteQRMinutos) || 15);
+    this.empresa.toleranciaEntradaMinutos = Math.max(1, Number(this.empresa.toleranciaEntradaMinutos) || 20);
+
+    this.empresa.tipoMiembroOption = this.tipoMiembroOption;
+    this.empresa.tipoMiembroSingular = this.etiquetaSingular;
+    this.empresa.tipoMiembroPlural = this.etiquetaPlural;
+
     this.aplicarVariablesGlobalesCSS(this.empresa.colorTema || '#f97316');
+    this.recalcularCronometros();
 
     try {
       await this.registroService.guardarEmpresaConfig(this.empresaActualId, this.empresa);
-      this.notificar('✅ Configuración, horario y color guardados para tu compañía', 'exito');
+      this.notificar('✅ Configuración, horario y tiempos guardados', 'exito');
       this.mostrarModalEmpresa = false;
     } catch (e) {
       console.error(e);
@@ -1117,8 +1585,8 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- DETECCIÓN DE TURNO ACTIVO Y BLOQUEO POR QR EXPIRADO ---
-  get registroActivo(): Registro | undefined {
+  // --- DETECCIÓN DE TURNO ACTIVO Y BLOQUEOS ---
+  get registroActivo(): RegistroExtendido | undefined {
     if (!this.usuarioActual) return undefined;
     const userEmail = (this.usuarioActual.correo || '').toLowerCase();
     const userName = (this.usuarioActual.nombre || '').toLowerCase();
@@ -1134,8 +1602,7 @@ export class App implements OnInit, OnDestroy {
     );
   }
 
-  // Verifica si el estudiante dejó vencer los 15 min del QR hoy y quedó bloqueado
-  get entradaBloqueadaPorExpiracionHoy(): Registro | undefined {
+  get entradaBloqueadaPorExpiracionHoy(): RegistroExtendido | undefined {
     if (!this.usuarioActual) return undefined;
     const hoy = new Date().toLocaleDateString('es-ES');
     const userEmail = (this.usuarioActual.correo || '').toLowerCase();
@@ -1143,7 +1610,7 @@ export class App implements OnInit, OnDestroy {
 
     return this.registros.find(r =>
       r.fecha === hoy &&
-      r.qrExpiradoSinEscanear === true &&
+      (r.qrExpiradoSinEscanear === true || r.comidaExpiradaSinRegresar === true || r.tareaExpiradaSinRegistrar === true) &&
       (
         (r.empleadoId && String(r.empleadoId).toLowerCase() === userEmail) ||
         (r.empleadoNombre && r.empleadoNombre.toLowerCase() === userName)
@@ -1151,12 +1618,44 @@ export class App implements OnInit, OnDestroy {
     );
   }
 
-  // Alertas visibles para el Encargado/Administrador cuando algún estudiante no escaneó a tiempo
-  get alertasQRExpiradoAdmin(): Registro[] {
+  get tieneTurnoCompletadoHoy(): boolean {
+    if (!this.usuarioActual) return false;
+    const hoy = new Date().toLocaleDateString('es-ES');
+    const userEmail = (this.usuarioActual.correo || '').toLowerCase();
+    const userName = (this.usuarioActual.nombre || '').toLowerCase();
+
+    return this.registros.some(r =>
+      r.fecha === hoy &&
+      r.estado === 'Completado' &&
+      (
+        (r.empleadoId && String(r.empleadoId).toLowerCase() === userEmail) ||
+        (r.empleadoNombre && r.empleadoNombre.toLowerCase() === userName)
+      )
+    );
+  }
+
+  get entradaBloqueadaPorRegistroUnicoHoy(): boolean {
+    return this.empresa.permitirMultiplesRegistrosDia === false && this.tieneTurnoCompletadoHoy;
+  }
+
+  get entradaBloqueadaPorToleranciaHorario(): boolean {
+    return this.empresa.habilitarLimiteEntrada === true && this.estadoToleranciaEntrada === 'EXPIRADO';
+  }
+
+  // --- ALERTAS AL ADMINISTRADOR (QR, COMIDA Y ACTIVIDADES EXPIRADAS) ---
+  get alertasQRExpiradoAdmin(): RegistroExtendido[] {
     return this.registros.filter(r => r.qrExpiradoSinEscanear === true && !r.alertaVistaPorAdmin);
   }
 
-  async descartarAlertaAdmin(reg: Registro): Promise<void> {
+  get alertasComidaExpiradaAdmin(): RegistroExtendido[] {
+    return this.registros.filter(r => r.comidaExpiradaSinRegresar === true && !r.alertaComidaVistaPorAdmin);
+  }
+
+  get alertasTareaExpiradaAdmin(): RegistroExtendido[] {
+    return this.registros.filter(r => r.tareaExpiradaSinRegistrar === true && !r.alertaTareaVistaPorAdmin);
+  }
+
+  async descartarAlertaAdmin(reg: RegistroExtendido): Promise<void> {
     reg.alertaVistaPorAdmin = true;
     if (reg.id && !reg.id.startsWith('temp_')) {
       await this.registroService.actualizarRegistro(reg.id, { alertaVistaPorAdmin: true });
@@ -1164,7 +1663,109 @@ export class App implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  async habilitarReintentoAlumno(reg: Registro): Promise<void> {
+  async descartarAlertaComidaAdmin(reg: RegistroExtendido): Promise<void> {
+    reg.alertaComidaVistaPorAdmin = true;
+    if (reg.id && !reg.id.startsWith('temp_')) {
+      await this.registroService.actualizarRegistro(reg.id, { alertaComidaVistaPorAdmin: true } as any);
+    }
+    this.notificar(`⛔ Turno de ${reg.empleadoNombre} mantenido cerrado.`, 'info');
+    this.cdr.detectChanges();
+  }
+
+  async continuarTurnoTrasComida(reg: RegistroExtendido): Promise<void> {
+    const ahoraStr = new Date().toLocaleTimeString('es-ES');
+    const nuevasComidas = (typeof reg.comidasRealizadas === 'number' ? reg.comidasRealizadas : 0) + 1;
+    const maxComidas = this.maxComidasPermitidas;
+    const agoto = nuevasComidas >= maxComidas;
+
+    reg.estado = 'En Turno';
+    reg.comidaExpiradaSinRegresar = false;
+    reg.alertaComidaVistaPorAdmin = true;
+    reg.horaPausaFin = ahoraStr;
+    reg.horaSalida = '';
+    reg.totalHoras = '';
+    reg.comidasRealizadas = nuevasComidas;
+    reg.comidaTerminada = agoto;
+
+    const idReal = await this.obtenerIdRealRegistro(reg);
+    if (idReal) {
+      await this.registroService.actualizarRegistro(idReal, {
+        estado: 'En Turno',
+        comidaExpiradaSinRegresar: false,
+        alertaComidaVistaPorAdmin: true,
+        horaPausaFin: ahoraStr,
+        horaSalida: '',
+        totalHoras: '',
+        comidasRealizadas: nuevasComidas,
+        comidaTerminada: agoto
+      } as any);
+    }
+    this.notificar(`✅ Se autorizó a ${reg.empleadoNombre} seguir en turno.`, 'exito');
+    this.cdr.detectChanges();
+  }
+
+  async darMasTiempoComida(reg: RegistroExtendido, minutosExtra: number = 15): Promise<void> {
+    const ahoraMs = Date.now();
+    reg.estado = 'En Pausa';
+    reg.comidaExpiradaSinRegresar = false;
+    reg.alertaComidaVistaPorAdmin = true;
+    reg.timestampPausaInicio = ahoraMs;
+    reg.minutosComidaAsignados = minutosExtra;
+    reg.horaSalida = '';
+    reg.totalHoras = '';
+
+    const idReal = await this.obtenerIdRealRegistro(reg);
+    if (idReal) {
+      await this.registroService.actualizarRegistro(idReal, {
+        estado: 'En Pausa',
+        comidaExpiradaSinRegresar: false,
+        alertaComidaVistaPorAdmin: true,
+        timestampPausaInicio: ahoraMs,
+        minutosComidaAsignados: minutosExtra,
+        horaSalida: '',
+        totalHoras: ''
+      } as any);
+    }
+    this.notificar(`⏱️ Se dieron +${minutosExtra} min extra de comida a ${reg.empleadoNombre}.`, 'exito');
+    this.cdr.detectChanges();
+  }
+
+  async descartarAlertaTareaAdmin(reg: RegistroExtendido): Promise<void> {
+    reg.alertaTareaVistaPorAdmin = true;
+    if (reg.id && !reg.id.startsWith('temp_')) {
+      await this.registroService.actualizarRegistro(reg.id, { alertaTareaVistaPorAdmin: true } as any);
+    }
+    this.notificar(`⛔ Turno de ${reg.empleadoNombre} mantenido cerrado.`, 'info');
+    this.cdr.detectChanges();
+  }
+
+  async continuarTurnoTrasTarea(reg: RegistroExtendido): Promise<void> {
+    const ahoraMs = Date.now();
+    reg.estado = 'En Turno';
+    reg.tareaExpiradaSinRegistrar = false;
+    reg.alertaTareaVistaPorAdmin = true;
+    reg.timestampTareaInicio = ahoraMs;
+    reg.horaSalida = '';
+    reg.totalHoras = '';
+    reg.observacion = 'Pendiente de registrar actividad (Tiempo extra otorgado)';
+
+    const idReal = await this.obtenerIdRealRegistro(reg);
+    if (idReal) {
+      await this.registroService.actualizarRegistro(idReal, {
+        estado: 'En Turno',
+        tareaExpiradaSinRegistrar: false,
+        alertaTareaVistaPorAdmin: true,
+        timestampTareaInicio: ahoraMs,
+        horaSalida: '',
+        totalHoras: '',
+        observacion: 'Pendiente de registrar actividad (Tiempo extra otorgado)'
+      } as any);
+    }
+    this.notificar(`✅ Se reactivó el turno de ${reg.empleadoNombre} para anotar su actividad.`, 'exito');
+    this.cdr.detectChanges();
+  }
+
+  async habilitarReintentoAlumno(reg: RegistroExtendido): Promise<void> {
     if (!reg.id) return;
     this.registros = this.registros.filter(r => r.id !== reg.id);
     if (!reg.id.startsWith('temp_')) {
@@ -1177,13 +1778,25 @@ export class App implements OnInit, OnDestroy {
   get estaEnTurno(): boolean { return this.registroActivo?.estado === 'En Turno'; }
   get estaEnPausa(): boolean { return this.registroActivo?.estado === 'En Pausa'; }
 
-  get comidaYaUtilizada(): boolean {
-    const reg = this.registroActivo;
-    if (!reg) return false;
-    return !!(reg.comidaTerminada || (reg.horaPausaInicio && reg.horaPausaFin));
+  // Conteo de comidas usadas vs permitidas en el turno actual
+  get maxComidasPermitidas(): number {
+    return Math.max(0, Number(this.empresa.maxComidasPorTurno ?? 1));
   }
 
-  private async obtenerIdRealRegistro(reg: Registro): Promise<string | null> {
+  get comidasUsadasEnTurno(): number {
+    const reg = this.registroActivo;
+    if (!reg) return 0;
+    if (typeof reg.comidasRealizadas === 'number') {
+      return reg.comidasRealizadas;
+    }
+    return (reg.comidaTerminada || (reg.horaPausaInicio && reg.horaPausaFin)) ? 1 : 0;
+  }
+
+  get comidasAgotadasEnTurno(): boolean {
+    return this.comidasUsadasEnTurno >= this.maxComidasPermitidas;
+  }
+
+  private async obtenerIdRealRegistro(reg: RegistroExtendido): Promise<string | null> {
     if (reg.id && !reg.id.startsWith('temp_')) return reg.id;
     const encontrado = this.registros.find(
       r => r.id && !r.id.startsWith('temp_') && r.timestampEntrada === reg.timestampEntrada
@@ -1202,7 +1815,17 @@ export class App implements OnInit, OnDestroy {
     if (!this.usuarioActual || !this.empresaActualId || this.estaEnTurno || this.estaEnPausa || this.cargandoAccion) return;
 
     if (this.entradaBloqueadaPorExpiracionHoy) {
-      this.notificar('⛔ No puedes marcar entrada: Excediste los 15 min de tu QR anterior. Contacta al encargado.', 'alerta');
+      this.notificar('⛔ No puedes marcar entrada: Tu turno anterior fue cerrado por tiempo expirado. Contacta al encargado.', 'alerta');
+      return;
+    }
+
+    if (this.entradaBloqueadaPorToleranciaHorario) {
+      this.notificar(`⛔ Tiempo de entrada expirado: Superaste la tolerancia de ${this.empresa.toleranciaEntradaMinutos || 20} min después de las ${this.empresa.horaInicio}.`, 'alerta');
+      return;
+    }
+
+    if (this.entradaBloqueadaPorRegistroUnicoHoy) {
+      this.notificar('⚠️ Ya completaste tu registro de hoy (solo se permite 1 registro por día).', 'alerta');
       return;
     }
 
@@ -1214,6 +1837,7 @@ export class App implements OnInit, OnDestroy {
     const horaStr = ahora.toLocaleTimeString('es-ES');
     const mesAno = ahora.toISOString().substring(0, 7);
     const pin = 'TK-' + Math.floor(100000 + Math.random() * 900000);
+    const minsQR = Number(this.empresa.tiempoLimiteQRMinutos) || 15;
 
     const textoInicial = this.observacionActual.trim();
     const tieneActividadInicial = textoInicial.length > 0;
@@ -1225,12 +1849,12 @@ export class App implements OnInit, OnDestroy {
       ? `[${horaStr}] ${textoInicial}`
       : 'Pendiente de registrar actividad';
 
-    const nuevo: Registro = {
+    const nuevo: RegistroExtendido = {
       id: 'temp_' + ahoraMs,
       empresaId: this.empresaActualId,
       empleadoId: String(this.usuarioActual.correo).toLowerCase(),
       empleadoNombre: this.usuarioActual.nombre,
-      puesto: this.usuarioActual.puesto || 'Estudiante / Colaborador',
+      puesto: this.usuarioActual.puesto || this.etiquetaSingular,
       departamento: this.usuarioActual.departamento || 'General',
       fecha: ahora.toLocaleDateString('es-ES'),
       mesAno,
@@ -1240,7 +1864,10 @@ export class App implements OnInit, OnDestroy {
       actividades: listaActividadesInicial,
       actividadRegistrada: tieneActividadInicial,
       comidaTerminada: false,
+      comidasRealizadas: 0,
+      historialComidas: [],
       timestampEntrada: ahoraMs,
+      timestampTareaInicio: ahoraMs,
       timestampQR: ahoraMs,
       codigoQR: pin,
       verificadoCamaraMovil: false,
@@ -1252,7 +1879,7 @@ export class App implements OnInit, OnDestroy {
     this.observacionActual = '';
     await this.mostrarQRConTemporizador(pin, ahoraMs);
     this.recalcularCronometros();
-    this.notificar('🟢 Entrada iniciada. Escanea el QR antes de 15 min o se anulará.', 'exito');
+    this.notificar(`🟢 Entrada iniciada. Escanea el QR antes de ${minsQR} min o se anulará.`, 'exito');
 
     try {
       const docRef = await this.registroService.agregarRegistro(nuevo);
@@ -1475,7 +2102,8 @@ export class App implements OnInit, OnDestroy {
       const ahora = new Date();
       const ahoraMs = ahora.getTime();
       const horaExacta = ahora.toLocaleTimeString('es-ES');
-      const LIMITE_15_MIN_MS = 15 * 60 * 1000;
+      const minsQR = Number(this.empresa.tiempoLimiteQRMinutos) || 15;
+      const LIMITE_QR_MS = minsQR * 60 * 1000;
 
       const registrosFrescos = await this.registroService.obtenerRegistrosDirecto(this.empresaActualId);
       if (registrosFrescos.length > 0) {
@@ -1487,9 +2115,9 @@ export class App implements OnInit, OnDestroy {
 
       if (regAlumno && pinRegistroAlumno && (pinIngresado === pinRegistroAlumno || pinIngresado.includes(pinRegistroAlumno))) {
         const tsCreacion = regAlumno.timestampQR || regAlumno.timestampEntrada || 0;
-        if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_15_MIN_MS)) {
-          this.errorModalEscaner = '❌ El código QR caducó (pasaron más de 15 minutos).';
-          this.notificar('El código QR ya caducó (límite 15 min)', 'alerta');
+        if (tsCreacion > 0 && (ahoraMs - tsCreacion > LIMITE_QR_MS)) {
+          this.errorModalEscaner = `❌ El código QR caducó (pasaron más de ${minsQR} minutos).`;
+          this.notificar(`El código QR ya caducó (límite ${minsQR} min)`, 'alerta');
           return;
         }
 
@@ -1521,7 +2149,7 @@ export class App implements OnInit, OnDestroy {
     }
   }
 
-  // --- PAUSA COMIDA DE UN SOLO USO POR JORNADA ---
+  // --- PAUSA COMIDA CON CANTIDAD DE VECES Y DURACIÓN EDITABLE ---
   async conmutarPausa(): Promise<void> {
     const reg = this.registroActivo;
     if (!reg) {
@@ -1530,9 +2158,18 @@ export class App implements OnInit, OnDestroy {
     }
     if (this.cargandoAccion) return;
 
-    if (reg.estado === 'En Turno' && this.comidaYaUtilizada) {
-      this.notificar('⚠️ Ya utilizaste tu única comida permitida en esta jornada.', 'alerta');
-      return;
+    const maxComidas = this.maxComidasPermitidas;
+    const comidasActuales = this.comidasUsadasEnTurno;
+
+    if (reg.estado === 'En Turno') {
+      if (maxComidas <= 0) {
+        this.notificar('⚠️ Las pausas de comida están deshabilitadas por el encargado.', 'alerta');
+        return;
+      }
+      if (comidasActuales >= maxComidas) {
+        this.notificar(`⚠️ Ya utilizaste tus ${maxComidas} comida(s) permitida(s) en esta jornada.`, 'alerta');
+        return;
+      }
     }
 
     this.cargandoAccion = true;
@@ -1543,34 +2180,58 @@ export class App implements OnInit, OnDestroy {
     const pasandoAPausa = reg.estado === 'En Turno';
 
     const nuevoEstado: 'En Pausa' | 'En Turno' = pasandoAPausa ? 'En Pausa' : 'En Turno';
-    const datosActualizar: Partial<Registro> = { estado: nuevoEstado };
+    const datosActualizar: Partial<RegistroExtendido> = { estado: nuevoEstado };
+    const historialActual: ComidaItem[] = Array.isArray(reg.historialComidas) ? [...reg.historialComidas] : [];
 
     if (pasandoAPausa) {
-      reg.estado = 'En Pausa';
-      reg.horaPausaInicio = horaActual;
-      reg.timestampPausaInicio = ahora.getTime();
-      datosActualizar.horaPausaInicio = horaActual;
-      datosActualizar.timestampPausaInicio = ahora.getTime();
-
       const minsComida = Number(this.empresa.duracionComidaMinutos) || 45;
+      historialActual.push({ inicio: horaActual });
+      reg.estado = 'En Pausa';
+      reg.horaPausaInicio = reg.horaPausaInicio || horaActual;
+      reg.timestampPausaInicio = ahora.getTime();
+      reg.minutosComidaAsignados = minsComida;
+      reg.historialComidas = historialActual;
+
+      datosActualizar.horaPausaInicio = reg.horaPausaInicio;
+      datosActualizar.timestampPausaInicio = ahora.getTime();
+      datosActualizar.minutosComidaAsignados = minsComida;
+      datosActualizar.historialComidas = historialActual;
+
       this.recalcularCronometros();
-      this.notificar(`☕ Comida iniciada (${horaActual}). Tienes ${minsComida} min (uso único).`, 'info');
+      this.notificar(`☕ Comida #${comidasActuales + 1} de ${maxComidas} iniciada (${horaActual}). Tienes ${minsComida} min.`, 'info');
     } else {
       const segundosUsados = reg.timestampPausaInicio
         ? Math.max(1, Math.floor((ahora.getTime() - reg.timestampPausaInicio) / 1000))
         : 0;
 
+      const nuevasComidasUsadas = comidasActuales + 1;
+      if (historialActual.length > 0) {
+        historialActual[historialActual.length - 1] = {
+          ...historialActual[historialActual.length - 1],
+          fin: horaActual,
+          segundos: segundosUsados
+        };
+      }
+
+      const agotoComidas = nuevasComidasUsadas >= maxComidas;
+
       reg.estado = 'En Turno';
       reg.horaPausaFin = horaActual;
-      reg.comidaTerminada = true;
-      reg.segundosComidaUsados = segundosUsados;
+      reg.comidasRealizadas = nuevasComidasUsadas;
+      reg.historialComidas = historialActual;
+      reg.comidaTerminada = agotoComidas;
+      reg.minutosComidaAsignados = undefined;
+      reg.segundosComidaUsados = (reg.segundosComidaUsados || 0) + segundosUsados;
 
       datosActualizar.horaPausaFin = horaActual;
-      datosActualizar.comidaTerminada = true;
-      datosActualizar.segundosComidaUsados = segundosUsados;
+      datosActualizar.comidasRealizadas = nuevasComidasUsadas;
+      datosActualizar.historialComidas = historialActual;
+      datosActualizar.comidaTerminada = agotoComidas;
+      datosActualizar.minutosComidaAsignados = 0;
+      datosActualizar.segundosComidaUsados = reg.segundosComidaUsados;
 
       this.recalcularCronometros();
-      this.notificar(`✅ Comida finalizada a las ${horaActual}. Turno reanudado.`, 'exito');
+      this.notificar(`✅ Comida #${nuevasComidasUsadas} de ${maxComidas} finalizada a las ${horaActual}. Turno reanudado.`, 'exito');
     }
 
     try {
@@ -1699,16 +2360,17 @@ export class App implements OnInit, OnDestroy {
   // --- EXPORTACIÓN DE REPORTES CSV ---
   exportarSoloHoras(): void {
     if (!this.empresa.habilitarReporteHoras) return;
-    let csv = '\uFEFFID,Estudiante,Departamento,Fecha,Hora Entrada,Hora Escaneo QR,Inicio Comida,Fin Comida,Hora Salida,Estado\n';
+    let csv = `\uFEFFID,${this.etiquetaSingular},Departamento,Fecha,Hora Entrada,Hora Escaneo QR,Inicio Comida,Fin Comida,Comidas Usadas,Hora Salida,Estado\n`;
     this.registrosFiltrados.forEach(r => {
-      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaEscaneoQR || 'Sin escanear'}","${r.horaPausaInicio || '--'}","${r.horaPausaFin || '--'}","${r.horaSalida || 'En turno'}","${r.estado}"\n`;
+      const comidasCount = typeof r.comidasRealizadas === 'number' ? r.comidasRealizadas : (r.horaPausaInicio ? 1 : 0);
+      csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaEscaneoQR || 'Sin escanear'}","${r.horaPausaInicio || '--'}","${r.horaPausaFin || '--'}","${comidasCount}","${r.horaSalida || 'En turno'}","${r.estado}"\n`;
     });
     this.descargarArchivoCSV(csv, `Reporte_Horas_${this.mesFiltroReporte}.csv`);
   }
 
   exportarSoloActividades(): void {
     if (!this.empresa.habilitarReporteInformes) return;
-    let csv = '\uFEFFID,Estudiante,Departamento,Fecha,Tareas y Actividades Registradas,Reporte Final\n';
+    let csv = `\uFEFFID,${this.etiquetaSingular},Departamento,Fecha,Tareas y Actividades Registradas,Reporte Final\n`;
     this.registrosFiltrados.forEach(r => {
       csv += `"${r.id || ''}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
     });
@@ -1717,9 +2379,10 @@ export class App implements OnInit, OnDestroy {
 
   exportarReporteCompleto(): void {
     if (!this.empresa.habilitarReporteCompleto) return;
-    let csv = '\uFEFFID,Empresa,Ubicacion,Estudiante,Departamento,Fecha,Entrada,Escaneo QR,Inicio Comida,Fin Comida,Salida,Estado,PIN QR,Tareas y Actividades,Reporte Final\n';
+    let csv = `\uFEFFID,Empresa,Ubicacion,${this.etiquetaSingular},Departamento,Fecha,Entrada,Escaneo QR,Inicio Comida,Fin Comida,Comidas Usadas,Salida,Estado,PIN QR,Tareas y Actividades,Reporte Final\n`;
     this.registrosFiltrados.forEach(r => {
-      csv += `"${r.id || ''}","${this.empresa.nombre}","${this.empresa.ubicacion}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaEscaneoQR || 'Sin escanear'}","${r.horaPausaInicio || '--'}","${r.horaPausaFin || '--'}","${r.horaSalida || 'En turno'}","${r.estado}","${r.codigoQR || ''}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
+      const comidasCount = typeof r.comidasRealizadas === 'number' ? r.comidasRealizadas : (r.horaPausaInicio ? 1 : 0);
+      csv += `"${r.id || ''}","${this.empresa.nombre}","${this.empresa.ubicacion}","${r.empleadoNombre}","${r.departamento}","${r.fecha}","${r.horaEntrada}","${r.horaEscaneoQR || 'Sin escanear'}","${r.horaPausaInicio || '--'}","${r.horaPausaFin || '--'}","${comidasCount}","${r.horaSalida || 'En turno'}","${r.estado}","${r.codigoQR || ''}","${(r.observacion || '').replace(/"/g, '""')}","${(r.reporteFinal || '').replace(/"/g, '""')}"\n`;
     });
     this.descargarArchivoCSV(csv, `Reporte_Completo_${this.mesFiltroReporte}.csv`);
   }
@@ -1737,7 +2400,7 @@ export class App implements OnInit, OnDestroy {
     this.notificar('📄 Reporte descargado correctamente', 'exito');
   }
 
-  // --- LISTA COMPLETA Y CONTEO DE ALUMNOS DE ESTA COMPAÑÍA ---
+  // --- LISTA COMPLETA Y CONTEO DE MIEMBROS DE ESTA COMPAÑÍA ---
   get listaEstudiantesRegistrados(): Usuario[] {
     return this.usuariosSistema.filter(u => (u.rol || '').toLowerCase() !== 'admin');
   }
@@ -1768,13 +2431,15 @@ export class App implements OnInit, OnDestroy {
     );
 
     if (!regHoy) return '⚪ Sin marcaje hoy';
-    if (regHoy.estado === 'Expirado' || regHoy.qrExpiradoSinEscanear) return '⛔ QR Expirado (Bloqueado)';
+    if (regHoy.estado === 'Expirado' || regHoy.qrExpiradoSinEscanear || regHoy.comidaExpiradaSinRegresar || regHoy.tareaExpiradaSinRegistrar) {
+      return '⛔ Cerrado / Bloqueado';
+    }
     if (regHoy.estado === 'En Turno') return '🟢 En Turno (' + regHoy.horaEntrada + ')';
     if (regHoy.estado === 'En Pausa') return '☕ En Comida';
     return '✅ Completado';
   }
 
-  get registrosFiltrados(): Registro[] {
+  get registrosFiltrados(): RegistroExtendido[] {
     return this.registros.filter(r => {
       const q = this.busquedaEmpleado.toLowerCase();
       const coincideBusqueda =
@@ -1786,7 +2451,7 @@ export class App implements OnInit, OnDestroy {
     });
   }
 
-  get misRegistrosEstudiante(): Registro[] {
+  get misRegistrosEstudiante(): RegistroExtendido[] {
     if (!this.usuarioActual) return [];
     const userEmail = (this.usuarioActual.correo || '').toLowerCase();
     const userName = (this.usuarioActual.nombre || '').toLowerCase();
@@ -1815,7 +2480,7 @@ export class App implements OnInit, OnDestroy {
   eliminarUsuario(id?: string): void {
     if (!id) return;
     this.usuariosSistema = this.usuariosSistema.filter(u => u.id !== id);
-    this.registroService.eliminarUsuario(id).then(() => this.notificar('Alumno eliminado del directorio', 'info'));
+    this.registroService.eliminarUsuario(id).then(() => this.notificar(`${this.etiquetaSingular} eliminado del directorio`, 'info'));
     this.cdr.detectChanges();
   }
 

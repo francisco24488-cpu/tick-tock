@@ -1,3 +1,123 @@
+<style>
+  .tactile-time-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .tactile-time-box {
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .tactile-time-box:focus-within {
+    border-color: var(--primary, #f97316);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px var(--primary-soft, rgba(249, 115, 22, 0.12));
+  }
+  .tactile-time-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .tactile-time-badge {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--primary, #f97316);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .tactile-clear-btn {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+  }
+  .tactile-clear-btn:hover {
+    background: #fee2e2;
+    color: #ef4444;
+  }
+  .tactile-inputs-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .tactile-num-input {
+    width: 54px;
+    height: 42px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #0f172a;
+    background: #ffffff;
+    outline: none;
+  }
+  .tactile-num-input:focus {
+    border-color: var(--primary, #f97316);
+  }
+  .tactile-colon {
+    font-size: 1.25rem;
+    font-weight: 900;
+    color: #64748b;
+  }
+  .ampm-pill-group {
+    display: inline-flex;
+    background: #e2e8f0;
+    padding: 3px;
+    border-radius: 10px;
+    margin-left: auto;
+  }
+  .ampm-pill-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ampm-pill-btn.active {
+    background: var(--primary, #f97316);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  .minute-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .minute-chip-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #334155;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 7px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .minute-chip-btn:hover {
+    border-color: var(--primary, #f97316);
+    color: var(--primary, #f97316);
+  }
+  .minute-chip-btn.active {
+    background: var(--primary, #f97316);
+    border-color: var(--primary, #f97316);
+    color: #ffffff;
+  }
+</style>
+
 <div class="dashboard-container" [ngStyle]="temaEstilos">
   <!-- Notificación Toast -->
   <div class="toast-notification" [class.show]="mostrarToast" [ngClass]="tipoToast">
@@ -5,18 +125,18 @@
     <span class="toast-text">{{ mensajeToast }}</span>
   </div>
 
-  <!-- MODAL VERIFICACIÓN EN 2 PASOS POR GMAIL (ENVÍO DIRECTO DE CÓDIGO) -->
+  <!-- MODAL VERIFICACIÓN EN 2 PASOS POR GMAIL -->
   <div class="modal-overlay" *ngIf="mostrarModalVerificacionGmail && usuarioPendienteVerificacion">
-    <div class="modal-card modal-scroll">
+    <div class="modal-card">
       <div class="modal-badge-live">🔐 VERIFICACIÓN EN 2 PASOS • GMAIL</div>
       <h3 class="modal-title">Verifica tu correo Gmail</h3>
       <p class="modal-sub">
-        Para activar la cuenta de <strong>{{ usuarioPendienteVerificacion.nombre }}</strong>, enviamos un código de verificación de 6 dígitos al correo:
+        Enviamos un código de verificación de 6 dígitos al correo de <strong>{{ usuarioPendienteVerificacion.nombre }}</strong>:
         <br><strong>{{ usuarioPendienteVerificacion.correo }}</strong>
       </p>
 
       <div class="verify-status-ok margin-b" *ngIf="correoEnviadoExito">
-        📩 ¡Código enviado! Revisa la bandeja de entrada (o Spam) de <strong>{{ usuarioPendienteVerificacion.correo }}</strong> e ingrésalo abajo.
+        📩 ¡Código enviado! Revisa tu bandeja de entrada (o Spam) en <strong>{{ usuarioPendienteVerificacion.correo }}</strong> e ingrésalo abajo o haz clic en "Sí, soy yo" dentro del correo.
       </div>
 
       <div class="modal-error-banner" *ngIf="errorEnvioGmail">
@@ -43,41 +163,11 @@
         </button>
       </div>
 
-      <!-- Configuración rápida de EmailJS si la compañía aún no la ha conectado -->
-      <div class="emailjs-setup-box">
-        <button type="button" class="btn-link-subtle" (click)="mostrarConfigEmailJSInline = !mostrarConfigEmailJSInline">
-          ⚙️ {{ mostrarConfigEmailJSInline ? 'Ocultar configuración de envío Gmail' : 'Configurar envío automático Gmail (EmailJS)' }}
-        </button>
-
-        <div *ngIf="mostrarConfigEmailJSInline" class="margin-top">
-          <p class="sub-text-gray margin-b">
-            Conecta tu cuenta gratuita de <strong>emailjs.com</strong> (con tu Gmail) para enviar códigos reales al instante:
-          </p>
-          <div class="form-group margin-b">
-            <label>Service ID:</label>
-            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsServiceId" placeholder="Ej: service_xxxxxxx">
-          </div>
-          <div class="form-group margin-b">
-            <label>Template ID (usa la variable &#123;&#123;codigo&#125;&#125; y &#123;&#123;to_email&#125;&#125;):</label>
-            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsTemplateId" placeholder="Ej: template_xxxxxxx">
-          </div>
-          <div class="form-group margin-b">
-            <label>Public Key:</label>
-            <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsPublicKey" placeholder="Ej: user_xxxxxxxxxxxx">
-          </div>
-          <button type="button" class="btn-confirm-primary width-100" (click)="guardarConfigEmailJSYReenviar()">
-            💾 Guardar y Enviar Código Ahora
-          </button>
-        </div>
-      </div>
-
-      <div class="margin-top text-center">
-        <button type="button" class="btn-cancel-modal width-100" (click)="cerrarModalVerificacionGmail()">Cerrar</button>
-      </div>
+      <button type="button" class="btn-cancel-modal width-100" (click)="cerrarModalVerificacionGmail()">Cerrar</button>
     </div>
   </div>
 
-  <!-- MODAL DE CÓDIGO QR EN COMPUTADORA (SE CIERRA AUTOMÁTICAMENTE AL ESCANEARLO EN EL CELULAR) -->
+  <!-- MODAL DE CÓDIGO QR EN COMPUTADORA -->
   <div class="modal-overlay" *ngIf="mostrarModalQR && !registroActivo?.verificadoCamaraMovil">
     <div class="modal-card qr-modal-card">
       <div class="modal-badge-live" [class.expired]="tiempoRestanteQR === 0">
@@ -136,7 +226,7 @@
     </div>
   </div>
 
-  <!-- MODAL CONFIGURACIÓN DE EMPRESA, HORARIO, COLOR Y CORREO GMAIL -->
+  <!-- MODAL CONFIGURACIÓN DE EMPRESA, TIEMPOS LÍMITE, COMIDAS Y HORARIO TÁCTIL -->
   <div class="modal-overlay" *ngIf="mostrarModalEmpresa">
     <div class="modal-card modal-scroll">
       <h3 class="modal-title">⚙️ Configuración de Tu Compañía</h3>
@@ -162,67 +252,183 @@
       </div>
 
       <div class="form-group margin-b">
+        <label>🏷️ ¿Cómo llamas a las personas que registran asistencia?</label>
+        <select class="select-clean" [(ngModel)]="tipoMiembroOption">
+          <option *ngFor="let op of opcionesTipoMiembro" [value]="op.id">{{ op.plural }} ({{ op.singular }})</option>
+          <option value="__OTRO__">➕ Otro nombre personalizado...</option>
+        </select>
+      </div>
+
+      <div class="form-row margin-b" *ngIf="tipoMiembroOption === '__OTRO__'">
+        <div class="form-group flex-1">
+          <label>En singular (Ej: Practicante):</label>
+          <input type="text" class="input-clean" [(ngModel)]="tipoMiembroSingularCustom" placeholder="Ej: Practicante">
+        </div>
+        <div class="form-group flex-1">
+          <label>En plural (Ej: Practicantes):</label>
+          <input type="text" class="input-clean" [(ngModel)]="tipoMiembroPluralCustom" placeholder="Ej: Practicantes">
+        </div>
+      </div>
+
+      <div class="form-group margin-b">
         <label>Nombre de la Compañía / Institución:</label>
-        <input type="text" class="input-clean" [(ngModel)]="empresa.nombre" placeholder="Ej: Instituto Tecnológico / Mi Empresa">
+        <input type="text" class="input-clean" [(ngModel)]="empresa.nombre" placeholder="Ej: Mi Empresa / Institución">
       </div>
 
       <div class="form-group margin-b">
         <label>Sucursal / Campus:</label>
-        <input type="text" class="input-clean" [(ngModel)]="empresa.sucursal" placeholder="Ej: Campus Principal">
+        <input type="text" class="input-clean" [(ngModel)]="empresa.sucursal" placeholder="Ej: Sucursal Principal">
       </div>
 
+      <!-- EDITOR TÁCTIL DE HORARIO DE JORNADA (AM / PM + ESCRITURA LIBRE + MINUTOS EXACTOS) -->
       <div class="form-group margin-b">
-        <label>Horario de Jornada:</label>
-        <div class="schedule-duo-grid">
-          <div class="schedule-select-wrap">
-            <span class="schedule-tag">De:</span>
-            <select class="select-clean" [(ngModel)]="empresa.horaInicio">
-              <option value="">-- Selecciona hora --</option>
-              <option *ngFor="let h of opcionesHorario" [value]="h">{{ h }}</option>
-            </select>
+        <label>🕒 Horario de Jornada (escribe la hora/minutos o toca los botones):</label>
+        <div class="tactile-time-grid">
+          <!-- HORA INICIO -->
+          <div class="tactile-time-box">
+            <div class="tactile-time-top">
+              <span class="tactile-time-badge">De (Entrada)</span>
+              <button type="button" class="tactile-clear-btn" *ngIf="cfgInicioHora" (click)="limpiarHoraConfig('inicio')">Limpiar</button>
+            </div>
+            <div class="tactile-inputs-row">
+              <input
+                type="text"
+                inputmode="numeric"
+                maxlength="2"
+                class="tactile-num-input"
+                [(ngModel)]="cfgInicioHora"
+                (ngModelChange)="sincronizarHorarioConfig()"
+                placeholder="08">
+              <span class="tactile-colon">:</span>
+              <input
+                type="text"
+                inputmode="numeric"
+                maxlength="2"
+                class="tactile-num-input"
+                [(ngModel)]="cfgInicioMin"
+                (ngModelChange)="sincronizarHorarioConfig()"
+                placeholder="00">
+              <div class="ampm-pill-group">
+                <button type="button" class="ampm-pill-btn" [class.active]="cfgInicioAmPm === 'AM'" (click)="cambiarAmPmConfig('inicio', 'AM')">AM</button>
+                <button type="button" class="ampm-pill-btn" [class.active]="cfgInicioAmPm === 'PM'" (click)="cambiarAmPmConfig('inicio', 'PM')">PM</button>
+              </div>
+            </div>
+            <div class="minute-chips-row">
+              <button
+                type="button"
+                *ngFor="let m of minutosRapidos"
+                class="minute-chip-btn"
+                [class.active]="cfgInicioHora && cfgInicioMin === m"
+                (click)="seleccionarMinutoConfig('inicio', m)">
+                :{{ m }}
+              </button>
+            </div>
           </div>
-          <div class="schedule-select-wrap">
-            <span class="schedule-tag">A:</span>
-            <select class="select-clean" [(ngModel)]="empresa.horaFin">
-              <option value="">-- Selecciona hora --</option>
-              <option *ngFor="let h of opcionesHorario" [value]="h">{{ h }}</option>
-            </select>
+
+          <!-- HORA FIN -->
+          <div class="tactile-time-box">
+            <div class="tactile-time-top">
+              <span class="tactile-time-badge">A (Salida)</span>
+              <button type="button" class="tactile-clear-btn" *ngIf="cfgFinHora" (click)="limpiarHoraConfig('fin')">Limpiar</button>
+            </div>
+            <div class="tactile-inputs-row">
+              <input
+                type="text"
+                inputmode="numeric"
+                maxlength="2"
+                class="tactile-num-input"
+                [(ngModel)]="cfgFinHora"
+                (ngModelChange)="sincronizarHorarioConfig()"
+                placeholder="05">
+              <span class="tactile-colon">:</span>
+              <input
+                type="text"
+                inputmode="numeric"
+                maxlength="2"
+                class="tactile-num-input"
+                [(ngModel)]="cfgFinMin"
+                (ngModelChange)="sincronizarHorarioConfig()"
+                placeholder="00">
+              <div class="ampm-pill-group">
+                <button type="button" class="ampm-pill-btn" [class.active]="cfgFinAmPm === 'AM'" (click)="cambiarAmPmConfig('fin', 'AM')">AM</button>
+                <button type="button" class="ampm-pill-btn" [class.active]="cfgFinAmPm === 'PM'" (click)="cambiarAmPmConfig('fin', 'PM')">PM</button>
+              </div>
+            </div>
+            <div class="minute-chips-row">
+              <button
+                type="button"
+                *ngFor="let m of minutosRapidos"
+                class="minute-chip-btn"
+                [class.active]="cfgFinHora && cfgFinMin === m"
+                (click)="seleccionarMinutoConfig('fin', m)">
+                :{{ m }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="form-group margin-b">
         <label>Ubicación Física (Dirección):</label>
-        <input type="text" class="input-clean" [(ngModel)]="empresa.ubicacion" placeholder="Ej: Av. Tecnológico #100, Col. Centro">
+        <input type="text" class="input-clean" [(ngModel)]="empresa.ubicacion" placeholder="Ej: Av. Principal #100, Col. Centro">
       </div>
 
-      <div class="form-group margin-b">
-        <label>🍱 Tiempo asignado para comida (minutos):</label>
-        <input type="number" min="5" max="180" class="input-clean" [(ngModel)]="empresa.duracionComidaMinutos" placeholder="Ej: 45">
+      <!-- CONFIGURACIÓN EDITABLE DE COMIDAS (DURACIÓN Y CANTIDAD DE VECES) -->
+      <div class="form-row margin-b">
+        <div class="form-group flex-1">
+          <label>🍱 Tiempo por cada comida (minutos):</label>
+          <input type="number" min="1" max="180" class="input-clean" [(ngModel)]="empresa.duracionComidaMinutos" placeholder="Ej: 45">
+        </div>
+        <div class="form-group flex-1">
+          <label>🍽️ Veces que puede ir a comer:</label>
+          <input type="number" min="0" max="10" class="input-clean" [(ngModel)]="empresa.maxComidasPorTurno" placeholder="Ej: 1">
+        </div>
+      </div>
+
+      <!-- CONFIGURACIÓN EDITABLE DE CRONÓMETROS DE QR Y TAREAS -->
+      <div class="form-row margin-b">
+        <div class="form-group flex-1">
+          <label>📷 Tiempo límite Código QR (min):</label>
+          <input type="number" min="1" max="120" class="input-clean" [(ngModel)]="empresa.tiempoLimiteQRMinutos" placeholder="Ej: 15">
+        </div>
+        <div class="form-group flex-1">
+          <label>📝 Tiempo límite anotar tarea (min):</label>
+          <input type="number" min="1" max="240" class="input-clean" [(ngModel)]="empresa.tiempoLimiteTareasMinutos" placeholder="Ej: 10">
+        </div>
+      </div>
+
+      <!-- CONTROL DE CRONÓMETRO DE TOLERANCIA DE ENTRADA Y REGISTROS MÚLTIPLES -->
+      <div class="toggles-box margin-b">
+        <h4>⏱️ Control de Horario de Entrada y Registros Diarios</h4>
+
+        <label class="toggle-row">
+          <input type="checkbox" [(ngModel)]="empresa.habilitarLimiteEntrada">
+          <span>
+            <strong>Activar cronómetro de tolerancia para marcar entrada</strong>
+            (Pueden marcar antes de la hora de inicio o dentro de los minutos de tolerancia; después se bloquea ese día)
+          </span>
+        </label>
+
+        <div class="form-group margin-b margin-top" *ngIf="empresa.habilitarLimiteEntrada">
+          <label>⏳ Minutos de tolerancia después de las <strong>{{ empresa.horaInicio || '(configura hora de inicio arriba)' }}</strong>:</label>
+          <input type="number" min="1" max="240" class="input-clean" [(ngModel)]="empresa.toleranciaEntradaMinutos" placeholder="Ej: 20">
+        </div>
+
+        <label class="toggle-row">
+          <input type="checkbox" [(ngModel)]="empresa.permitirMultiplesRegistrosDia">
+          <span>
+            <strong>Permitir registrar entrada varias veces en el mismo día</strong>
+            (Si se desactiva, solo podrán hacer 1 registro por día)
+          </span>
+        </label>
       </div>
 
       <div class="toggles-box margin-b">
-        <h4>📧 Envío Automático de Códigos de Verificación Gmail (EmailJS)</h4>
-        <div class="form-group margin-b">
-          <label>Service ID:</label>
-          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsServiceId" placeholder="Ej: service_xxxxxxx">
-        </div>
-        <div class="form-group margin-b">
-          <label>Template ID:</label>
-          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsTemplateId" placeholder="Ej: template_xxxxxxx">
-        </div>
-        <div class="form-group">
-          <label>Public Key:</label>
-          <input type="text" class="input-clean" [(ngModel)]="empresa.emailjsPublicKey" placeholder="Ej: user_xxxxxxxxxxxx">
-        </div>
-      </div>
-
-      <div class="toggles-box margin-b">
-        <h4>🎛️ Habilitar o Deshabilitar Funciones</h4>
+        <h4>🎛️ Otras Funciones y Reportes</h4>
 
         <label class="toggle-row">
           <input type="checkbox" [(ngModel)]="empresa.habilitarFormEstudiantes">
-          <span>Pedir Matrícula y Teléfono en formulario de alumnos</span>
+          <span>Pedir Matrícula / ID y Teléfono en formulario de {{ etiquetaPlural.toLowerCase() }}</span>
         </label>
 
         <label class="toggle-row">
@@ -272,11 +478,11 @@
     </div>
   </div>
 
-  <!-- MODAL ALTA ALUMNO POR ADMIN (CON OJITO EN CONTRASEÑA Y DEPARTAMENTO LIBRE) -->
+  <!-- MODAL ALTA NUEVO REGISTRO POR ADMIN -->
   <div class="modal-overlay" *ngIf="mostrarModalNuevoEstudiante">
     <div class="modal-card modal-scroll">
-      <h3 class="modal-title">➕ Registrar Nuevo Alumno</h3>
-      <p class="modal-sub">El estudiante quedará registrado exclusivamente en <strong>{{ empresa.nombre }}</strong>:</p>
+      <h3 class="modal-title">➕ Registrar Nuevo {{ etiquetaSingular }}</h3>
+      <p class="modal-sub">Quedará registrado exclusivamente en <strong>{{ empresa.nombre }}</strong>:</p>
 
       <div class="form-group margin-b">
         <label>Nombre Completo:</label>
@@ -285,7 +491,7 @@
 
       <div class="form-group margin-b">
         <label>Correo Electrónico (Gmail):</label>
-        <input type="email" class="input-clean" [(ngModel)]="adminNuevoCorreo" placeholder="Ej: alumno@gmail.com">
+        <input type="email" class="input-clean" [(ngModel)]="adminNuevoCorreo" placeholder="Ej: correo@gmail.com">
       </div>
 
       <div class="form-group margin-b">
@@ -339,15 +545,15 @@
     </div>
   </div>
 
-  <!-- MODAL EDITAR ESTUDIANTE (ADMIN - CON OJITO EN CONTRASEÑA) -->
+  <!-- MODAL EDITAR MIEMBRO (ADMIN) -->
   <div class="modal-overlay" *ngIf="mostrarModalEditarEstudiante">
     <div class="modal-card modal-scroll">
-      <h3 class="modal-title">✏️ Editar Datos del Estudiante</h3>
-      <p class="modal-sub">Modifica la información del alumno seleccionado:</p>
+      <h3 class="modal-title">✏️ Editar Datos del {{ etiquetaSingular }}</h3>
+      <p class="modal-sub">Modifica la información seleccionada:</p>
 
       <div class="form-group margin-b">
         <label>Nombre Completo:</label>
-        <input type="text" class="input-clean" [(ngModel)]="editEstudianteNombre" placeholder="Nombre del estudiante">
+        <input type="text" class="input-clean" [(ngModel)]="editEstudianteNombre" placeholder="Nombre completo">
       </div>
 
       <div class="form-row margin-b">
@@ -390,7 +596,7 @@
             [type]="verPassEditarAlumno ? 'text' : 'password'"
             class="input-clean"
             [(ngModel)]="editEstudiantePassword"
-            placeholder="Contraseña del alumno">
+            placeholder="Contraseña">
           <button type="button" class="btn-toggle-pass" (click)="verPassEditarAlumno = !verPassEditarAlumno" title="Mostrar u ocultar contraseña">
             {{ verPassEditarAlumno ? '🙈' : '👁️' }}
           </button>
@@ -418,7 +624,7 @@
       </div>
 
       <div class="welcome-actions">
-        <button type="button" class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión (Compañía o Alumno)</button>
+        <button type="button" class="btn-hero-primary" (click)="irAAuth('login')">🔑 Iniciar Sesión</button>
         <button type="button" class="btn-hero-secondary" (click)="irAAuth('registro')">🏢 Registrar Nueva Compañía</button>
       </div>
     </div>
@@ -463,12 +669,31 @@
       <!-- FORMULARIO REGISTRO EXCLUSIVO PARA COMPAÑÍAS -->
       <form *ngIf="tabAuth === 'registro'" (ngSubmit)="ejecutarRegistro()">
         <div class="company-only-notice margin-b">
-          🏢 <strong>Registro de Compañía / Institución:</strong> Crea el espacio independiente de tu organización. Una vez dentro, podrás registrar a todos tus alumnos.
+          🏢 <strong>Registro de Compañía / Institución:</strong> Crea el espacio independiente de tu organización y define qué tipo de personas registrarán asistencia.
         </div>
 
         <div class="form-group margin-b">
           <label>Nombre de la Compañía / Institución *:</label>
-          <input type="text" class="input-clean" [(ngModel)]="formEmpresaNombre" name="empresaNombre" placeholder="Ej: Instituto Tecnológico / Mi Empresa" required>
+          <input type="text" class="input-clean" [(ngModel)]="formEmpresaNombre" name="empresaNombre" placeholder="Ej: Mi Empresa / Institución" required>
+        </div>
+
+        <div class="form-group margin-b">
+          <label>¿Quiénes serán los próximos registros de asistencia? *:</label>
+          <select class="select-clean" [(ngModel)]="formTipoMiembroOption" name="tipoMiembro">
+            <option *ngFor="let op of opcionesTipoMiembro" [value]="op.id">{{ op.plural }} ({{ op.singular }})</option>
+            <option value="__OTRO__">➕ Otro (Escribir cómo se llamarán)...</option>
+          </select>
+        </div>
+
+        <div class="form-row margin-b" *ngIf="formTipoMiembroOption === '__OTRO__'">
+          <div class="form-group flex-1">
+            <label>En singular (Ej: Practicante):</label>
+            <input type="text" class="input-clean" [(ngModel)]="formTipoMiembroSingularCustom" name="tipoSing" placeholder="Ej: Practicante">
+          </div>
+          <div class="form-group flex-1">
+            <label>En plural (Ej: Practicantes):</label>
+            <input type="text" class="input-clean" [(ngModel)]="formTipoMiembroPluralCustom" name="tipoPlur" placeholder="Ej: Practicantes">
+          </div>
         </div>
 
         <div class="form-group margin-b">
@@ -478,25 +703,93 @@
 
         <div class="form-group margin-b">
           <label>Sucursal / Campus:</label>
-          <input type="text" class="input-clean" [(ngModel)]="formSucursal" name="sucursal" placeholder="Ej: Campus Principal">
+          <input type="text" class="input-clean" [(ngModel)]="formSucursal" name="sucursal" placeholder="Ej: Sucursal Principal">
         </div>
 
+        <!-- EDITOR TÁCTIL DE HORARIO EN REGISTRO -->
         <div class="form-group margin-b">
-          <label>Horario de Jornada:</label>
-          <div class="schedule-duo-grid">
-            <div class="schedule-select-wrap">
-              <span class="schedule-tag">De:</span>
-              <select class="select-clean" [(ngModel)]="formHoraInicio" name="horaInicio">
-                <option value="">-- Hora inicio --</option>
-                <option *ngFor="let h of opcionesHorario" [value]="h">{{ h }}</option>
-              </select>
+          <label>🕒 Horario de Jornada (AM / PM):</label>
+          <div class="tactile-time-grid">
+            <div class="tactile-time-box">
+              <div class="tactile-time-top">
+                <span class="tactile-time-badge">De (Entrada)</span>
+              </div>
+              <div class="tactile-inputs-row">
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="2"
+                  class="tactile-num-input"
+                  [(ngModel)]="regInicioHora"
+                  name="regIniH"
+                  (ngModelChange)="sincronizarHorarioRegistro()"
+                  placeholder="08">
+                <span class="tactile-colon">:</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="2"
+                  class="tactile-num-input"
+                  [(ngModel)]="regInicioMin"
+                  name="regIniM"
+                  (ngModelChange)="sincronizarHorarioRegistro()"
+                  placeholder="00">
+                <div class="ampm-pill-group">
+                  <button type="button" class="ampm-pill-btn" [class.active]="regInicioAmPm === 'AM'" (click)="cambiarAmPmRegistro('inicio', 'AM')">AM</button>
+                  <button type="button" class="ampm-pill-btn" [class.active]="regInicioAmPm === 'PM'" (click)="cambiarAmPmRegistro('inicio', 'PM')">PM</button>
+                </div>
+              </div>
+              <div class="minute-chips-row">
+                <button
+                  type="button"
+                  *ngFor="let m of minutosRapidos"
+                  class="minute-chip-btn"
+                  [class.active]="regInicioHora && regInicioMin === m"
+                  (click)="seleccionarMinutoRegistro('inicio', m)">
+                  :{{ m }}
+                </button>
+              </div>
             </div>
-            <div class="schedule-select-wrap">
-              <span class="schedule-tag">A:</span>
-              <select class="select-clean" [(ngModel)]="formHoraFin" name="horaFin">
-                <option value="">-- Hora fin --</option>
-                <option *ngFor="let h of opcionesHorario" [value]="h">{{ h }}</option>
-              </select>
+
+            <div class="tactile-time-box">
+              <div class="tactile-time-top">
+                <span class="tactile-time-badge">A (Salida)</span>
+              </div>
+              <div class="tactile-inputs-row">
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="2"
+                  class="tactile-num-input"
+                  [(ngModel)]="regFinHora"
+                  name="regFinH"
+                  (ngModelChange)="sincronizarHorarioRegistro()"
+                  placeholder="05">
+                <span class="tactile-colon">:</span>
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  maxlength="2"
+                  class="tactile-num-input"
+                  [(ngModel)]="regFinMin"
+                  name="regFinM"
+                  (ngModelChange)="sincronizarHorarioRegistro()"
+                  placeholder="00">
+                <div class="ampm-pill-group">
+                  <button type="button" class="ampm-pill-btn" [class.active]="regFinAmPm === 'AM'" (click)="cambiarAmPmRegistro('fin', 'AM')">AM</button>
+                  <button type="button" class="ampm-pill-btn" [class.active]="regFinAmPm === 'PM'" (click)="cambiarAmPmRegistro('fin', 'PM')">PM</button>
+                </div>
+              </div>
+              <div class="minute-chips-row">
+                <button
+                  type="button"
+                  *ngFor="let m of minutosRapidos"
+                  class="minute-chip-btn"
+                  [class.active]="regFinHora && regFinMin === m"
+                  (click)="seleccionarMinutoRegistro('fin', m)">
+                  :{{ m }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -578,7 +871,7 @@
           <span class="user-avatar-chip">{{ usuarioActual.avatar }}</span>
           <div>
             <strong>{{ usuarioActual.nombre }}</strong>
-            <small class="block-puesto">{{ usuarioActual.rol === 'admin' ? '👑 Encargado / Admin' : '👤 Alumno' }}</small>
+            <small class="block-puesto">{{ usuarioActual.rol === 'admin' ? '👑 Encargado / Admin' : '👤 ' + etiquetaSingular }}</small>
           </div>
         </div>
         <button type="button" class="btn-logout-chip" (click)="cerrarSesion()">🔒 Salir</button>
@@ -589,7 +882,15 @@
       <div class="info-chips">
         <span class="chip">📍 Área: <strong>{{ usuarioActual.departamento }}</strong></span>
         <button type="button" class="chip-edit-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="abrirModalEmpresa()">
-          ⚙️ Configuración & Gmail
+          ⚙️ Configuración
+        </button>
+        <button
+          type="button"
+          class="chip-edit-btn"
+          *ngIf="usuarioActual.rol === 'admin'"
+          (click)="toggleRapidoLimiteEntrada()"
+          title="Activar o desactivar el cronómetro de tolerancia de hora de entrada">
+          {{ empresa.habilitarLimiteEntrada ? '⏱️ Límite Entrada: ON (' + (empresa.toleranciaEntradaMinutos || 20) + 'm)' : '🔓 Límite Entrada: OFF' }}
         </button>
         <button type="button" class="chip-refresh-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="recargarDatosDesdeNube(true)">
           🔄 Actualizar Lista
@@ -617,13 +918,12 @@
     </div>
 
     <main class="main-content">
-      <!-- ==================== VISTA ALUMNO / ESTUDIANTE ==================== -->
+      <!-- ==================== VISTA MIEMBRO / EMPLEADO / ALUMNO ==================== -->
       <section class="card student-card-clean" *ngIf="usuarioActual.rol !== 'admin'">
         <div class="verify-success-banner margin-b" *ngIf="mensajeExitoVerificacionLink">
           {{ mensajeExitoVerificacionLink }}
         </div>
 
-        <!-- Cabecera de Estado del Estudiante -->
         <div class="student-profile-banner">
           <div class="user-meta">
             <div class="user-avatar">{{ usuarioActual.avatar }}</div>
@@ -642,21 +942,43 @@
           </div>
         </div>
 
-        <!-- Aviso de bloqueo si excedió los 15 minutos del QR sin escanear -->
-        <div class="qr-expired-lock-banner margin-b" *ngIf="!estaEnTurno && !estaEnPausa && entradaBloqueadaPorExpiracionHoy">
+        <!-- AVISOS DE TOLERANCIA DE HORARIO PARA MARCAR ENTRADA -->
+        <div class="verify-status-ok margin-b" *ngIf="!estaEnTurno && !estaEnPausa && empresa.habilitarLimiteEntrada && estadoToleranciaEntrada === 'ANTES'">
+          🟢 <strong>Horario de entrada:</strong> {{ empresa.horaInicio }}. Puedes marcar tu entrada desde ahora (tendrás {{ empresa.toleranciaEntradaMinutos || 20 }} min de tolerancia después de las {{ empresa.horaInicio }}).
+        </div>
+
+        <div class="qr-expired-lock-banner margin-b" *ngIf="!estaEnTurno && !estaEnPausa && empresa.habilitarLimiteEntrada && estadoToleranciaEntrada === 'EN_TOLERANCIA'">
           <div>
-            <strong>⛔ No puedes marcar entrada:</strong> El cronómetro de 15 minutos llegó a <code>00:00</code> sin que escanearas tu código QR. Tu registro fue anulado y ya se avisó al encargado.
+            <strong>⏳ ¡Tiempo de tolerancia corriendo!</strong> Tu entrada era a las <strong>{{ empresa.horaInicio }}</strong>. Te quedan <strong>{{ formatearSegundos(tiempoRestanteToleranciaEntrada) }}</strong> para marcar entrada antes de que se bloquee por hoy.
           </div>
         </div>
 
-        <!-- Banner de confirmación cuando el QR ya fue escaneado en tiempo real -->
+        <div class="qr-expired-lock-banner margin-b" *ngIf="!estaEnTurno && !estaEnPausa && entradaBloqueadaPorToleranciaHorario">
+          <div>
+            <strong>⛔ Registro cerrado por hoy:</strong> Excediste los <strong>{{ empresa.toleranciaEntradaMinutos || 20 }} minutos</strong> de tolerancia después de tu hora de entrada (<strong>{{ empresa.horaInicio }}</strong>).
+          </div>
+        </div>
+
+        <!-- AVISO DE TURNO CERRADO / BLOQUEADO POR QR, COMIDA O ACTIVIDAD EXPIRADA -->
+        <div class="qr-expired-lock-banner margin-b" *ngIf="!estaEnTurno && !estaEnPausa && entradaBloqueadaPorExpiracionHoy">
+          <div>
+            <ng-container *ngIf="entradaBloqueadaPorExpiracionHoy.comidaExpiradaSinRegresar">
+              <strong>⛔ Turno cerrado por tiempo de comida agotado:</strong> El cronómetro de comida llegó a <code>00:00</code> sin que regresaras. Tu turno fue cerrado automáticamente y se notificó al encargado.
+            </ng-container>
+            <ng-container *ngIf="entradaBloqueadaPorExpiracionHoy.tareaExpiradaSinRegistrar">
+              <strong>⛔ Turno cerrado por falta de actividad:</strong> El cronómetro de {{ empresa.tiempoLimiteTareasMinutos || 10 }} minutos llegó a <code>00:00</code> sin que registraras tu tarea. Tu turno fue cerrado y se notificó al encargado.
+            </ng-container>
+            <ng-container *ngIf="entradaBloqueadaPorExpiracionHoy.qrExpiradoSinEscanear && !entradaBloqueadaPorExpiracionHoy.comidaExpiradaSinRegresar && !entradaBloqueadaPorExpiracionHoy.tareaExpiradaSinRegistrar">
+              <strong>⛔ No puedes marcar entrada:</strong> El cronómetro de {{ empresa.tiempoLimiteQRMinutos || 15 }} minutos llegó a <code>00:00</code> sin que escanearas tu código QR. Tu registro fue anulado y ya se avisó al encargado.
+            </ng-container>
+          </div>
+        </div>
+
         <div class="qr-scanned-banner margin-b" *ngIf="(estaEnTurno || estaEnPausa) && registroActivo?.verificadoCamaraMovil">
           <span>✅ <strong>Código QR Escaneado</strong> correctamente a las <strong>{{ registroActivo?.horaEscaneoQR }}</strong></span>
         </div>
 
-        <!-- Panel Principal de Acciones del Estudiante -->
         <div class="student-workspace-box">
-          <!-- Nueva Actividad / Tarea acumulable sin borrar anteriores -->
           <div class="activity-inline-box">
             <label>📝 Nueva Actividad / Tarea:</label>
             <div class="activity-inline-row">
@@ -676,7 +998,6 @@
               </button>
             </div>
 
-            <!-- Lista de tareas ya registradas en la jornada actual -->
             <div class="tasks-accumulated-box" *ngIf="(estaEnTurno || estaEnPausa) && actividadesTurnoActivo.length > 0">
               <div class="tasks-accumulated-title">
                 ✅ Tareas registradas en este turno ({{ actividadesTurnoActivo.length }}):
@@ -691,24 +1012,41 @@
             </div>
           </div>
 
-          <!-- Botones Principales según etapa del turno -->
           <div class="student-main-actions">
-            <!-- ETAPA 1: Sin turno activo -> SOLO aparece Marcar Entrada (bloqueado si expiró su QR hoy) -->
             <ng-container *ngIf="!estaEnTurno && !estaEnPausa">
               <button
                 type="button"
                 class="btn-student-hero btn-primary-theme"
                 (click)="marcarEntrada()"
-                [disabled]="cargandoAccion || !!entradaBloqueadaPorExpiracionHoy">
-                <span class="btn-big-icon">{{ entradaBloqueadaPorExpiracionHoy ? '⛔' : '🟢' }}</span>
+                [disabled]="cargandoAccion || !!entradaBloqueadaPorExpiracionHoy || entradaBloqueadaPorToleranciaHorario || entradaBloqueadaPorRegistroUnicoHoy">
+                <span class="btn-big-icon">
+                  {{ (entradaBloqueadaPorExpiracionHoy || entradaBloqueadaPorToleranciaHorario) ? '⛔' : (entradaBloqueadaPorRegistroUnicoHoy ? '✅' : '🟢') }}
+                </span>
                 <div>
-                  <strong>{{ entradaBloqueadaPorExpiracionHoy ? 'Entrada Bloqueada (QR Expirado)' : 'Marcar Entrada' }}</strong>
-                  <small>{{ entradaBloqueadaPorExpiracionHoy ? 'Se notificó al encargado' : 'Iniciar mi turno y generar QR' }}</small>
+                  <strong>
+                    {{ entradaBloqueadaPorExpiracionHoy
+                        ? 'Turno Cerrado (Tiempo Expirado)'
+                        : (entradaBloqueadaPorToleranciaHorario
+                            ? 'Tiempo de Entrada Expirado'
+                            : (entradaBloqueadaPorRegistroUnicoHoy
+                                ? 'Jornada de Hoy Completada'
+                                : 'Marcar Entrada')) }}
+                  </strong>
+                  <small>
+                    {{ entradaBloqueadaPorExpiracionHoy
+                        ? 'En espera de autorización del encargado'
+                        : (entradaBloqueadaPorToleranciaHorario
+                            ? 'Pasaron ' + (empresa.toleranciaEntradaMinutos || 20) + ' min de ' + empresa.horaInicio
+                            : (entradaBloqueadaPorRegistroUnicoHoy
+                                ? 'Solo se permite 1 registro por día'
+                                : (estadoToleranciaEntrada === 'EN_TOLERANCIA'
+                                    ? 'Quedan ' + formatearSegundos(tiempoRestanteToleranciaEntrada) + ' para marcar'
+                                    : 'Iniciar mi turno y generar QR'))) }}
+                  </small>
                 </div>
               </button>
             </ng-container>
 
-            <!-- ETAPA 2: Entrada marcada, QR pendiente de escanear -->
             <ng-container *ngIf="(estaEnTurno || estaEnPausa) && !registroActivo?.verificadoCamaraMovil">
               <button
                 type="button"
@@ -733,25 +1071,30 @@
               </button>
             </ng-container>
 
-            <!-- ETAPA 3: QR ya escaneado -> Desaparece el QR y aparecen Comida y Salida -->
             <ng-container *ngIf="(estaEnTurno || estaEnPausa) && registroActivo?.verificadoCamaraMovil">
               <button
                 type="button"
                 class="btn-student-hero"
-                [ngClass]="estaEnPausa ? 'btn-green-finish' : (comidaYaUtilizada ? 'btn-meal-used' : 'btn-amber')"
+                [ngClass]="estaEnPausa ? 'btn-green-finish' : ((comidasAgotadasEnTurno || maxComidasPermitidas <= 0) ? 'btn-meal-used' : 'btn-amber')"
                 (click)="conmutarPausa()"
-                [disabled]="cargandoAccion || (!estaEnPausa && comidaYaUtilizada)">
-                <span class="btn-big-icon">{{ estaEnPausa ? '✅' : (comidaYaUtilizada ? '🔒' : '☕') }}</span>
+                [disabled]="cargandoAccion || (!estaEnPausa && (comidasAgotadasEnTurno || maxComidasPermitidas <= 0))">
+                <span class="btn-big-icon">{{ estaEnPausa ? '✅' : ((comidasAgotadasEnTurno || maxComidasPermitidas <= 0) ? '🔒' : '☕') }}</span>
                 <div>
                   <strong>
-                    {{ estaEnPausa ? 'Terminar Comida' : (comidaYaUtilizada ? 'Comida Finalizada' : 'Iniciar Comida') }}
+                    {{ estaEnPausa
+                        ? 'Terminar Comida'
+                        : (maxComidasPermitidas <= 0
+                            ? 'Comida Deshabilitada'
+                            : (comidasAgotadasEnTurno ? 'Comidas Agotadas (' + comidasUsadasEnTurno + '/' + maxComidasPermitidas + ')' : 'Iniciar Comida')) }}
                   </strong>
                   <small>
                     {{ estaEnPausa
-                        ? 'Regresar de comida'
-                        : (comidaYaUtilizada
-                            ? 'Ya usaste tu comida (' + registroActivo?.horaPausaInicio + ' - ' + registroActivo?.horaPausaFin + ')'
-                            : empresa.duracionComidaMinutos + ' min • 1 vez por jornada') }}
+                        ? 'Regresar de comida (' + (comidasUsadasEnTurno + 1) + ' de ' + maxComidasPermitidas + ')'
+                        : (maxComidasPermitidas <= 0
+                            ? 'No habilitada en esta compañía'
+                            : (comidasAgotadasEnTurno
+                                ? 'Ya usaste tus ' + maxComidasPermitidas + ' comida(s) permitida(s)'
+                                : empresa.duracionComidaMinutos + ' min • ' + comidasUsadasEnTurno + '/' + maxComidasPermitidas + ' usada(s)')) }}
                   </small>
                 </div>
               </button>
@@ -770,11 +1113,10 @@
             </ng-container>
           </div>
 
-          <!-- Cronómetros Compactos Informativos -->
           <div class="compact-timers-strip">
             <div class="mini-timer-pill" [class.pill-ok]="registroActivo?.verificadoCamaraMovil" [class.pill-warn]="(estaEnTurno || estaEnPausa) && !registroActivo?.verificadoCamaraMovil">
               <span>📷 QR:</span>
-              <strong>{{ registroActivo?.verificadoCamaraMovil ? 'Código Escaneado (' + registroActivo?.horaEscaneoQR + ')' : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteQR) : '15:00 min') }}</strong>
+              <strong>{{ registroActivo?.verificadoCamaraMovil ? 'Código Escaneado (' + registroActivo?.horaEscaneoQR + ')' : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteQR) : (empresa.tiempoLimiteQRMinutos || 15) + ':00 min') }}</strong>
             </div>
 
             <div class="mini-timer-pill" [class.pill-ok]="esActividadRegistrada(registroActivo)" [class.pill-warn]="(estaEnTurno || estaEnPausa) && !esActividadRegistrada(registroActivo)">
@@ -782,22 +1124,21 @@
               <strong>
                 {{ esActividadRegistrada(registroActivo)
                     ? actividadesTurnoActivo.length + ' registrada(s)'
-                    : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteActividad) : '10:00 min') }}
+                    : ((estaEnTurno || estaEnPausa) ? formatearSegundos(tiempoRestanteActividad) : (empresa.tiempoLimiteTareasMinutos || 10) + ':00 min') }}
               </strong>
             </div>
 
-            <div class="mini-timer-pill" [class.pill-warn]="estaEnPausa" [class.pill-ok]="comidaYaUtilizada">
-              <span>🍱 Comida:</span>
+            <div class="mini-timer-pill" [class.pill-warn]="estaEnPausa" [class.pill-ok]="comidasAgotadasEnTurno && maxComidasPermitidas > 0">
+              <span>🍱 Comidas:</span>
               <strong>
-                <ng-container *ngIf="estaEnPausa">{{ formatearSegundos(tiempoRestantePausa) }}</ng-container>
-                <ng-container *ngIf="!estaEnPausa && comidaYaUtilizada">Finalizada ({{ registroActivo?.horaPausaInicio }} - {{ registroActivo?.horaPausaFin }})</ng-container>
-                <ng-container *ngIf="!estaEnPausa && !comidaYaUtilizada">{{ empresa.duracionComidaMinutos }} min (Disponible)</ng-container>
+                <ng-container *ngIf="estaEnPausa">{{ formatearSegundos(tiempoRestantePausa) }} ({{ comidasUsadasEnTurno + 1 }}/{{ maxComidasPermitidas }})</ng-container>
+                <ng-container *ngIf="!estaEnPausa && maxComidasPermitidas <= 0">Deshabilitada</ng-container>
+                <ng-container *ngIf="!estaEnPausa && maxComidasPermitidas > 0">{{ comidasUsadasEnTurno }}/{{ maxComidasPermitidas }} usada(s) • {{ empresa.duracionComidaMinutos }} min c/u</ng-container>
               </strong>
             </div>
           </div>
         </div>
 
-        <!-- Historial del Alumno -->
         <div class="margin-top-2">
           <h3>📋 Mi Historial de Asistencia</h3>
           <div class="table-responsive margin-top">
@@ -842,11 +1183,12 @@
 
       <!-- ==================== VISTA ADMINISTRADOR ==================== -->
       <section class="card" *ngIf="usuarioActual.rol === 'admin'">
-        <!-- ALERTAS EN TIEMPO REAL CUANDO UN ALUMNO NO ESCANEÓ EL QR EN LOS 15 MINUTOS -->
-        <div class="admin-alerts-stack margin-b" *ngIf="alertasQRExpiradoAdmin.length > 0">
+        <!-- ALERTAS EN VIVO PARA EL ADMINISTRADOR (QR, COMIDA Y ACTIVIDADES EXPIRADAS) -->
+        <div class="admin-alerts-stack margin-b" *ngIf="alertasQRExpiradoAdmin.length > 0 || alertasComidaExpiradaAdmin.length > 0 || alertasTareaExpiradaAdmin.length > 0">
+          <!-- Alertas QR Expirado -->
           <div class="admin-alert-card" *ngFor="let alerta of alertasQRExpiradoAdmin">
             <div class="admin-alert-text">
-              <strong>🚨 Aviso para el Encargado:</strong> El alumno <strong>{{ alerta.empleadoNombre }}</strong> ({{ alerta.departamento }}) marcó entrada a las <strong>{{ alerta.horaEntrada }}</strong> pero <strong>NO escaneó su código QR dentro de los 15 minutos</strong>. Su entrada fue anulada y bloqueada.
+              <strong>🚨 QR Expirado:</strong> {{ alerta.empleadoNombre }} ({{ alerta.departamento }}) marcó entrada a las <strong>{{ alerta.horaEntrada }}</strong> pero <strong>NO escaneó su código QR dentro de los {{ empresa.tiempoLimiteQRMinutos || 15 }} minutos</strong>. Su entrada fue anulada.
             </div>
             <div class="admin-alert-actions">
               <button type="button" class="btn-unlock-student" (click)="habilitarReintentoAlumno(alerta)">
@@ -857,14 +1199,50 @@
               </button>
             </div>
           </div>
+
+          <!-- Alertas Tiempo de Comida Agotado -->
+          <div class="admin-alert-card" *ngFor="let alerta of alertasComidaExpiradaAdmin">
+            <div class="admin-alert-text">
+              <strong>🍱 Tiempo de Comida Agotado:</strong> A <strong>{{ alerta.empleadoNombre }}</strong> ({{ alerta.departamento }}) se le acabó su tiempo de comida ({{ alerta.minutosComidaAsignados || empresa.duracionComidaMinutos }} min) y se le cerró el turno automáticamente. ¿Qué deseas hacer?
+            </div>
+            <div class="admin-alert-actions">
+              <button type="button" class="btn-unlock-student" (click)="continuarTurnoTrasComida(alerta)">
+                ✅ Que siga en turno
+              </button>
+              <button type="button" class="btn-unlock-student" (click)="darMasTiempoComida(alerta, 15)">
+                ⏱️ Dar +15 min extra
+              </button>
+              <button type="button" class="btn-dismiss-alert" (click)="descartarAlertaComidaAdmin(alerta)">
+                ⛔ Dejar cerrado
+              </button>
+            </div>
+          </div>
+
+          <!-- Alertas Tiempo de Actividad Agotado -->
+          <div class="admin-alert-card" *ngFor="let alerta of alertasTareaExpiradaAdmin">
+            <div class="admin-alert-text">
+              <strong>📝 Sin Actividad Registrada:</strong> A <strong>{{ alerta.empleadoNombre }}</strong> ({{ alerta.departamento }}) se le acabó el tiempo ({{ empresa.tiempoLimiteTareasMinutos || 10 }} min) sin anotar ninguna tarea y se le cerró el turno. ¿Qué deseas hacer?
+            </div>
+            <div class="admin-alert-actions">
+              <button type="button" class="btn-unlock-student" (click)="continuarTurnoTrasTarea(alerta)">
+                ✅ Que siga en turno
+              </button>
+              <button type="button" class="btn-unlock-student" (click)="habilitarReintentoAlumno(alerta)">
+                🔓 Permitir Reintento
+              </button>
+              <button type="button" class="btn-dismiss-alert" (click)="descartarAlertaTareaAdmin(alerta)">
+                ⛔ Dejar cerrado
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="kpi-grid">
           <div class="kpi-box kpi-highlight">
-            <div class="kpi-icon icon-theme">🎓</div>
+            <div class="kpi-icon icon-theme">👥</div>
             <div>
               <h3>{{ totalEstudiantes }}</h3>
-              <span>Alumnos en {{ empresa.nombre }}</span>
+              <span>{{ etiquetaPlural }} en {{ empresa.nombre }}</span>
             </div>
           </div>
           <div class="kpi-box">
@@ -893,11 +1271,36 @@
         <div class="students-roster-panel margin-top-2">
           <div class="table-header-bar">
             <div>
-              <h3>🎓 Alumnos Registrados en {{ empresa.nombre }} ({{ totalEstudiantes }} en total)</h3>
-              <p class="sub-text-gray">Base de datos exclusiva de tu compañía (puedes editar datos o verificar su correo Gmail):</p>
+              <h3>👥 {{ etiquetaPlural }} Registrados en {{ empresa.nombre }} ({{ totalEstudiantes }} en total)</h3>
+              <p class="sub-text-gray">Base de datos exclusiva de tu compañía:</p>
             </div>
-            <button type="button" class="btn-confirm-primary" (click)="abrirModalNuevoEstudiante()">
-              ➕ Registrar Alumno
+
+            <div class="admin-toolbar">
+              <select
+                class="select-clean fit-content"
+                [ngModel]="tipoMiembroOption"
+                (ngModelChange)="cambiarTipoMiembroRapido($event)"
+                title="Cambiar cómo se llaman los registros">
+                <option *ngFor="let op of opcionesTipoMiembro" [value]="op.id">🏷️ Son: {{ op.plural }}</option>
+                <option value="__OTRO__">➕ Personalizar nombre...</option>
+              </select>
+
+              <button type="button" class="btn-confirm-primary" (click)="abrirModalNuevoEstudiante()">
+                ➕ Registrar {{ etiquetaSingular }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Si eligió personalizar el nombre directamente aquí -->
+          <div class="form-row margin-top" *ngIf="tipoMiembroOption === '__OTRO__'">
+            <div class="form-group flex-1">
+              <input type="text" class="input-clean" [(ngModel)]="tipoMiembroSingularCustom" placeholder="En singular (Ej: Practicante)">
+            </div>
+            <div class="form-group flex-1">
+              <input type="text" class="input-clean" [(ngModel)]="tipoMiembroPluralCustom" placeholder="En plural (Ej: Practicantes)">
+            </div>
+            <button type="button" class="btn-confirm-primary" (click)="guardarTipoMiembroEnNube(true)">
+              💾 Aplicar Nombre
             </button>
           </div>
 
@@ -906,7 +1309,7 @@
               type="text"
               class="search-clean"
               [(ngModel)]="busquedaAlumnoAdmin"
-              placeholder="🔍 Filtrar alumnos por nombre, matrícula, correo o departamento...">
+              [placeholder]="'🔍 Filtrar ' + etiquetaPlural.toLowerCase() + ' por nombre, ID, correo o departamento...'">
           </div>
 
           <div class="table-responsive margin-top">
@@ -914,7 +1317,7 @@
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Alumno</th>
+                  <th>{{ etiquetaSingular }}</th>
                   <th>Matrícula / ID</th>
                   <th>Correo Electrónico</th>
                   <th>Celular</th>
@@ -928,7 +1331,7 @@
                 <tr *ngFor="let alumno of estudiantesFiltradosAdmin; let i = index">
                   <td><strong>{{ i + 1 }}</strong></td>
                   <td><strong>{{ alumno.avatar || '🧑‍💻' }} {{ alumno.nombre }}</strong></td>
-                  <td><code class="qr-code-text">{{ alumno.matricula || 'Sin matrícula' }}</code></td>
+                  <td><code class="qr-code-text">{{ alumno.matricula || 'Sin ID' }}</code></td>
                   <td>{{ alumno.correo }}</td>
                   <td>{{ alumno.telefono || '--' }}</td>
                   <td><span class="badge-dept-theme">{{ alumno.departamento || 'General' }}</span></td>
@@ -954,7 +1357,7 @@
                 </tr>
                 <tr *ngIf="estudiantesFiltradosAdmin.length === 0">
                   <td colspan="9" class="empty-row">
-                    No hay alumnos registrados todavía en esta compañía. Haz clic en "➕ Registrar Alumno" para agregar uno.
+                    No hay {{ etiquetaPlural.toLowerCase() }} registrados todavía en esta compañía. Haz clic en "➕ Registrar {{ etiquetaSingular }}" para agregar uno.
                   </td>
                 </tr>
               </tbody>
@@ -982,13 +1385,13 @@
         </div>
 
         <div class="filter-bar margin-top">
-          <input type="text" class="search-clean" [(ngModel)]="busquedaEmpleado" placeholder="🔍 Buscar marcaje por alumno, área o tarea...">
+          <input type="text" class="search-clean" [(ngModel)]="busquedaEmpleado" [placeholder]="'🔍 Buscar marcaje por ' + etiquetaSingular.toLowerCase() + ', área o tarea...'">
           <select class="select-clean fit-content" [(ngModel)]="filtroEstado">
             <option value="TODOS">Todos los estados</option>
             <option value="En Turno">🟢 En Turno</option>
-            <option value="En Pausa">☕ En Pausa</option>
+            <option value="En Pausa">☕ En Comida</option>
             <option value="Completado">✅ Completados</option>
-            <option value="Expirado">⛔ QR Expirado</option>
+            <option value="Expirado">⛔ Cerrado / Expirado</option>
           </select>
         </div>
 
@@ -996,7 +1399,7 @@
           <table class="clean-table">
             <thead>
               <tr>
-                <th>Alumno</th>
+                <th>{{ etiquetaSingular }}</th>
                 <th>Departamento</th>
                 <th>Fecha</th>
                 <th>Entrada</th>
