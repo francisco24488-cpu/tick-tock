@@ -116,6 +116,71 @@
     border-color: var(--primary, #f97316);
     color: #ffffff;
   }
+
+  /* Tarjetas de Documentos / Manuales en el Modal de Información */
+  .doc-cards-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 14px 0 18px 0;
+  }
+  .doc-action-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1.5px solid var(--primary-border, rgba(249, 115, 22, 0.35));
+    background: #f8fafc;
+    text-decoration: none;
+    color: #0f172a;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, background 0.15s;
+    cursor: pointer;
+  }
+  .doc-action-card:hover {
+    transform: translateY(-2px);
+    background: #ffffff;
+    border-color: var(--primary, #f97316);
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  }
+  .doc-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--primary-soft, rgba(249, 115, 22, 0.12));
+    color: var(--primary, #f97316);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+  }
+  .doc-card-info {
+    flex: 1;
+    text-align: left;
+  }
+  .doc-card-info strong {
+    display: block;
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 3px;
+  }
+  .doc-card-info small {
+    display: block;
+    font-size: 0.8rem;
+    color: #64748b;
+    line-height: 1.35;
+  }
+  .doc-arrow-badge {
+    background: var(--primary, #f97316);
+    color: #ffffff;
+    font-size: 0.76rem;
+    font-weight: 800;
+    padding: 6px 11px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
 </style>
 
 <div class="dashboard-container" [ngStyle]="temaEstilos">
@@ -123,6 +188,61 @@
   <div class="toast-notification" [class.show]="mostrarToast" [ngClass]="tipoToast">
     <span class="toast-icon">{{ tipoToast === 'exito' ? '✅' : (tipoToast === 'alerta' ? '⚠️' : 'ℹ️') }}</span>
     <span class="toast-text">{{ mensajeToast }}</span>
+  </div>
+
+  <!-- MODAL INFORMACIÓN, MANUAL DE USUARIO E INFORME DE APLICACIÓN -->
+  <div class="modal-overlay" *ngIf="mostrarModalDocumentos && usuarioActual">
+    <div class="modal-card">
+      <div class="modal-badge-live">
+        {{ usuarioActual.rol === 'admin' ? '👑 DOCUMENTACIÓN • PERFIL ADMINISTRADOR' : '👤 DOCUMENTACIÓN • PERFIL ' + (etiquetaSingular | uppercase) }}
+      </div>
+      <h3 class="modal-title">📚 Información y Documentos</h3>
+      <p class="modal-sub">
+        Consulta o descarga la guía oficial de uso para tu perfil y el informe técnico del proyecto <strong>TickTock</strong>:
+      </p>
+
+      <div class="doc-cards-stack">
+        <!-- 1. Manual de Usuario dinámico según el rol -->
+        <a
+          class="doc-action-card"
+          [href]="linkManualSegunRol"
+          target="_blank"
+          rel="noopener noreferrer"
+          (click)="verificarLinkDocumento($event, linkManualSegunRol, usuarioActual.rol === 'admin' ? 'Manual de Usuario (Administrador)' : 'Manual de Usuario (' + etiquetaSingular + ')')">
+          <div class="doc-icon-box">📖</div>
+          <div class="doc-card-info">
+            <strong>
+              {{ usuarioActual.rol === 'admin'
+                  ? 'Manual de Usuario — Administrador'
+                  : 'Manual de Usuario — ' + etiquetaSingular }}
+            </strong>
+            <small>
+              {{ usuarioActual.rol === 'admin'
+                  ? 'Guía paso a paso para configurar horarios AM/PM, tiempos límite, directorio y reportes.'
+                  : 'Guía paso a paso para marcar entrada, escanear código QR, anotar tareas y comidas.' }}
+            </small>
+          </div>
+          <span class="doc-arrow-badge">Abrir ↗</span>
+        </a>
+
+        <!-- 2. Informe de Aplicación del Equipo -->
+        <a
+          class="doc-action-card"
+          [href]="LINK_INFORME_APLICACION"
+          target="_blank"
+          rel="noopener noreferrer"
+          (click)="verificarLinkDocumento($event, LINK_INFORME_APLICACION, 'Informe de Aplicación')">
+          <div class="doc-icon-box">📑</div>
+          <div class="doc-card-info">
+            <strong>Informe de Aplicación</strong>
+            <small>Documento completo de investigación, arquitectura y desarrollo realizado por el equipo.</small>
+          </div>
+          <span class="doc-arrow-badge">Ver / Descargar ↗</span>
+        </a>
+      </div>
+
+      <button type="button" class="btn-cancel-modal width-100" (click)="cerrarModalDocumentos()">Cerrar</button>
+    </div>
   </div>
 
   <!-- MODAL VERIFICACIÓN EN 2 PASOS POR GMAIL -->
@@ -881,6 +1001,12 @@
     <div class="sub-bar">
       <div class="info-chips">
         <span class="chip">📍 Área: <strong>{{ usuarioActual.departamento }}</strong></span>
+
+        <!-- BOTÓN DE INFORMACIÓN, MANUALES E INFORME (VISIBLE EN AMBOS PERFILES) -->
+        <button type="button" class="chip-edit-btn" (click)="abrirModalDocumentos()" title="Ver Manual de Usuario e Informe de Aplicación">
+          ℹ️ Más • Documentos
+        </button>
+
         <button type="button" class="chip-edit-btn" *ngIf="usuarioActual.rol === 'admin'" (click)="abrirModalEmpresa()">
           ⚙️ Configuración
         </button>

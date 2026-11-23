@@ -47,6 +47,13 @@ export class App implements OnInit, OnDestroy {
   private readonly EMAILJS_TEMPLATE_ID = 'template_ota0ucm';
   private readonly EMAILJS_PUBLIC_KEY = 'Oyqn5xRif_jnlnDNw';
 
+  // =========================================================================
+  // 🔗 PEGA AQUÍ LOS LINKS DE TUS DOCUMENTOS (Google Drive, PDF, Docs, etc.)
+  // =========================================================================
+  readonly LINK_MANUAL_ADMIN = 'https://njvwasjgrqepkiulxyxe.supabase.co/storage/v1/object/public/Manual%20de%20Usuario/Manual%20de%20Usuario%20-%20Perfil%20Administrador%20y%20Encargado.md.pdf';
+  readonly LINK_MANUAL_USUARIO = 'https://njvwasjgrqepkiulxyxe.supabase.co/storage/v1/object/public/Manual%20de%20Usuario/Manual%20de%20Usuario%20-%20Perfil%20Estudiante%20y%20Empleado.md.pdf';
+  readonly LINK_INFORME_APLICACION = 'https://njvwasjgrqepkiulxyxe.supabase.co/storage/v1/object/public/Informe/Informe%20de%20Prototipo.pdfhttps://PEGA_AQUI_LINK_INFORME_APLICACION';
+
   pantallaActual: 'bienvenida' | 'login' | 'registro' | 'dashboard' = 'bienvenida';
   tabAuth: 'login' | 'registro' = 'login';
 
@@ -177,6 +184,9 @@ export class App implements OnInit, OnDestroy {
   editEstudianteDeptPersonalizado: string = '';
   editEstudiantePassword: string = '';
 
+  // Modal Información, Manuales e Informe de Aplicación
+  mostrarModalDocumentos: boolean = false;
+
   // Verificación de 2 Pasos por Gmail con código
   mostrarModalVerificacionGmail: boolean = false;
   usuarioPendienteVerificacion: Usuario | null = null;
@@ -243,6 +253,33 @@ export class App implements OnInit, OnDestroy {
     private registroService: RegistroService,
     private cdr: ChangeDetectorRef
   ) {}
+
+  // --- GESTIÓN DEL MODAL DE INFORMACIÓN, MANUALES E INFORME ---
+  get linkManualSegunRol(): string {
+    return this.usuarioActual?.rol === 'admin'
+      ? this.LINK_MANUAL_ADMIN
+      : this.LINK_MANUAL_USUARIO;
+  }
+
+  abrirModalDocumentos(): void {
+    this.mostrarModalDocumentos = true;
+    this.cdr.detectChanges();
+  }
+
+  cerrarModalDocumentos(): void {
+    this.mostrarModalDocumentos = false;
+    this.cdr.detectChanges();
+  }
+
+  verificarLinkDocumento(event: Event, url: string, nombreDoc: string): void {
+    if (!url || url.includes('PEGA_AQUI_LINK')) {
+      event.preventDefault();
+      this.notificar(`⚠️ Aún no se ha configurado el link de "${nombreDoc}" en app.ts`, 'alerta');
+      return;
+    }
+    this.mostrarModalDocumentos = false;
+    this.cdr.detectChanges();
+  }
 
   // --- EDITOR TÁCTIL DE HORAS AM / PM ---
   private descomponerHoraTexto(texto?: string): { hora: string; min: string; ampm: 'AM' | 'PM' } {
@@ -1465,6 +1502,7 @@ export class App implements OnInit, OnDestroy {
     this.detenerCamara();
     this.mostrarModalQR = false;
     this.mostrarModalSalida = false;
+    this.mostrarModalDocumentos = false;
     this.usuarioActual = null;
     this.empresaActualId = '';
     this.sesionIniciada = false;
